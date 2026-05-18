@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>PRZ LLC Dispatch</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./prz-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <img src="./prz-logo.webp" alt="PRZ LLC logo" />
+          <div>
+            <span>PRZ LLC</span>
+            <strong>Operations</strong>
+          </div>
+        </div>
+
+        <label class="role-card">
+          Signed in as
+          <select id="roleSelect">
+            <option value="admin">Admin</option>
+            <option value="dispatcher">Dispatcher</option>
+            <option value="driver">Driver</option>
+            <option value="invoicing">Invoicing</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </label>
+
+        <nav class="nav-tabs" aria-label="Application sections">
+          <button class="nav-tab active" data-view="dispatch" data-roles="admin,dispatcher" type="button"><span class="tab-icon">DT</span>Dispatch</button>
+          <button class="nav-tab" data-view="drivers" data-roles="admin,dispatcher,driver" type="button"><span class="tab-icon">DR</span>Driver Mobile</button>
+          <button class="nav-tab" data-view="invoicing" data-roles="admin,invoicing" type="button"><span class="tab-icon">INV</span>Invoicing</button>
+          <button class="nav-tab" data-view="customers" data-roles="admin,dispatcher,invoicing" type="button"><span class="tab-icon">CUS</span>Customers</button>
+          <button class="nav-tab" data-view="operations" data-roles="admin,dispatcher" type="button"><span class="tab-icon">OPS</span>Calendar & Map</button>
+          <button class="nav-tab" data-view="maintenance" data-roles="admin,maintenance" type="button"><span class="tab-icon">MNT</span>Maintenance</button>
+          <button class="nav-tab" data-view="reports" data-roles="admin" type="button"><span class="tab-icon">RPT</span>Reports</button>
+          <button class="nav-tab" data-view="notifications" data-roles="admin,dispatcher,driver,invoicing" type="button"><span class="tab-icon">MSG</span>Notifications</button>
+          <button class="nav-tab" data-view="admin" data-roles="admin" type="button"><span class="tab-icon">ADM</span>Admin</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="system-label">Today</span>
+          <strong id="todayLabel">--</strong>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Trucking, crane, billing, and fleet control</p>
+            <h1 id="viewTitle">Dispatch</h1>
+          </div>
+          <div class="quick-actions">
+            <button class="ghost-button" id="seedDataButton" type="button">Load sample day</button>
+            <button class="danger-button" id="clearDataButton" type="button">Clear data</button>
+          </div>
+        </header>
+
+        <section class="driver-app-banner" id="driverAppBanner">
+          <div>
+            <p class="eyebrow">Driver app</p>
+            <h2>Today’s assignments</h2>
+          </div>
+          <button class="ghost-button" id="installAppButton" type="button" hidden>Add to phone</button>
+        </section>
+
+        <section class="stats-grid" aria-label="Ticket totals">
+          <article class="metric"><span>Open Tickets</span><strong id="openCount">0</strong></article>
+          <article class="metric"><span>With Drivers</span><strong id="driverCount">0</strong></article>
+          <article class="metric"><span>Ready to Invoice</span><strong id="invoiceCount">0</strong></article>
+          <article class="metric"><span>Projected Revenue</span><strong id="revenueCount">$0</strong></article>
+        </section>
+
+        <section class="view active" id="dispatchView">
+          <div class="view-grid">
+            <form class="panel ticket-form" id="ticketForm">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">New work ticket</p>
+                  <h2>Create and send</h2>
+                </div>
+                <span class="ticket-number" id="nextTicketNumber">PRZ-0000</span>
+              </div>
+
+              <div class="form-grid two">
+                <label>Customer<select id="customerSelect" name="customerId" required></select></label>
+                <label>Job date<input id="jobDate" name="jobDate" required type="date" /></label>
+              </div>
+              <label>Job site<input id="site" name="site" required placeholder="Address, yard, or lease location" /></label>
+              <div class="form-grid two">
+                <label>Service type<select id="serviceType" name="serviceType"><option>Crane lift</option><option>Trucking</option><option>Rig move</option><option>Haul off</option><option>Hot shot</option></select></label>
+                <label>Priority<select id="priority" name="priority"><option>Standard</option><option>High</option><option>Emergency</option></select></label>
+              </div>
+              <div class="form-grid two">
+                <label>Driver<select id="driver" name="driverId" required></select></label>
+                <label>Equipment<select id="equipment" name="equipmentId" required></select></label>
+              </div>
+              <div class="form-grid three">
+                <label>Start time<input id="startTime" name="startTime" type="time" /></label>
+                <label>Estimated hours<input id="hours" min="0.5" name="hours" step="0.5" type="number" value="4" /></label>
+                <label>Base rate<input id="rate" min="0" name="rate" step="25" type="number" value="175" /></label>
+              </div>
+              <div class="form-grid three">
+                <label>Mileage<input name="mileage" min="0" step="1" type="number" value="0" /></label>
+                <label>Fuel surcharge<input name="fuel" min="0" step="10" type="number" value="0" /></label>
+                <label>Minimum charge<input name="minimum" min="0" step="25" type="number" value="0" /></label>
+              </div>
+              <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
+              <label>Work instructions<textarea id="notes" name="notes" rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
+              <button class="primary-button" type="submit">Send work ticket to driver</button>
+            </form>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Live board</p>
+                  <h2>Active tickets</h2>
+                </div>
+                <select id="statusFilter" aria-label="Filter tickets by status">
+                  <option value="all">All statuses</option><option>Sent</option><option>Accepted</option><option>In Progress</option><option>Completed</option><option>Invoiced</option>
+                </select>
+              </div>
+              <div class="ticket-list" id="ticketList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="driversView">
+          <div class="view-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Driver mobile workflow</p><h2>Assigned tickets</h2></div>
+                <label class="compact-field">View driver<select id="driverQueueSelect"></select></label>
+              </div>
+              <div class="driver-summary" id="driverSummary"></div>
+              <div class="driver-mobile-actions">
+                <button class="ghost-button" id="showCurrentTicket" type="button">Current ticket</button>
+                <button class="ghost-button" id="showCompletedTickets" type="button">Completed today</button>
+              </div>
+              <div class="ticket-list wide" id="driverTicketList"></div>
+            </section>
+            <section class="panel signature-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Customer approval</p><h2>Signature and notes</h2></div>
+              </div>
+              <label>Ticket<select id="signatureTicketSelect"></select></label>
+              <label>Driver completion note<textarea id="driverNote" rows="3" placeholder="Delays, extra work, load condition, customer notes"></textarea></label>
+              <label>Photo or document attachment<input id="driverAttachment" type="file" multiple /></label>
+              <label>Customer name<input id="signerName" placeholder="Printed name" /></label>
+              <canvas id="signatureCanvas" width="620" height="180" aria-label="Signature pad"></canvas>
+              <div class="quick-actions">
+                <button class="ghost-button" id="clearSignature" type="button">Clear signature</button>
+                <button class="primary-button" id="saveCompletion" type="button">Save completion packet</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="invoicingView">
+          <div class="panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Billing handoff</p><h2>Work tickets for invoicing</h2></div>
+              <div class="quick-actions">
+                <button class="ghost-button" id="exportCsv" type="button">Export CSV</button>
+                <button class="ghost-button" id="exportPacket" type="button">Download invoice packet</button>
+                <div class="segmented"><button class="segment active" data-invoice-filter="ready" type="button">Ready</button><button class="segment" data-invoice-filter="all" type="button">All</button></div>
+              </div>
+            </div>
+            <div class="invoice-table-wrap">
+              <table class="invoice-table">
+                <thead><tr><th>Ticket</th><th>Customer</th><th>Service</th><th>Driver</th><th>Packet</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="invoiceRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="customersView">
+          <div class="view-grid">
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Customer and job database</p><h2>Saved customers</h2></div></div>
+              <form class="stack-form" id="customerForm">
+                <div class="form-grid two"><input id="customerName" required placeholder="Customer name" /><input id="customerContact" placeholder="Contact and phone" /></div>
+                <div class="form-grid two"><input id="customerTerms" placeholder="Billing terms" /><input id="customerSite" placeholder="Default job site" /></div>
+                <textarea id="customerInstructions" rows="3" placeholder="Gate codes, safety rules, preferred billing notes"></textarea>
+                <button class="primary-button" type="submit">Add customer</button>
+              </form>
+              <div class="admin-list" id="customerList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Job history</p><h2>Customer ticket history</h2></div></div>
+              <div class="ticket-list wide" id="customerHistory"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="operationsView">
+          <div class="view-grid">
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Dispatch calendar</p><h2>Schedule by day</h2></div></div>
+              <div class="schedule-grid" id="calendarBoard"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Map-style board</p><h2>Job sites and equipment</h2></div></div>
+              <div class="map-board" id="mapBoard"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="maintenanceView">
+          <div class="view-grid">
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Equipment availability</p><h2>Fleet status</h2></div></div>
+              <div class="admin-list" id="fleetStatusList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Maintenance tracking</p><h2>Service records</h2></div></div>
+              <form class="stack-form" id="maintenanceForm">
+                <div class="form-grid two"><label>Equipment<select id="maintenanceEquipment"></select></label><label>Due date<input id="maintenanceDue" type="date" /></label></div>
+                <div class="form-grid two"><input id="maintenanceTask" required placeholder="Service, inspection, certification" /><select id="maintenanceStatus"><option>Scheduled</option><option>Due Soon</option><option>Overdue</option><option>Complete</option></select></div>
+                <button class="primary-button" type="submit">Add maintenance item</button>
+              </form>
+              <div class="admin-list" id="maintenanceList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="reportsView">
+          <div class="reports-grid">
+            <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Reports</p><h2>Revenue by customer</h2></div></div><div id="customerReport"></div></section>
+            <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Utilization</p><h2>Equipment workload</h2></div></div><div id="equipmentReport"></div></section>
+            <section class="panel"><div class="panel-heading"><div><p class="eyebrow">A/R watch</p><h2>Uninvoiced work</h2></div></div><div id="uninvoicedReport"></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="notificationsView">
+          <div class="panel">
+            <div class="panel-heading"><div><p class="eyebrow">Dispatch alerts</p><h2>Notification log</h2></div><button class="ghost-button" id="clearNotifications" type="button">Clear log</button></div>
+            <div class="admin-list" id="notificationList"></div>
+          </div>
+        </section>
+
+        <section class="view" id="adminView">
+          <div class="admin-grid">
+            <section class="panel admin-wide">
+              <div class="panel-heading"><div><p class="eyebrow">User access</p><h2>Users and passwords</h2></div></div>
+              <form class="user-form" id="userForm">
+                <input id="userName" required placeholder="Full name" />
+                <input id="userUsername" required placeholder="Username" />
+                <select id="userRole">
+                  <option value="dispatcher">Dispatcher</option>
+                  <option value="driver">Driver</option>
+                  <option value="invoicing">Invoicing</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <input id="userPassword" required type="password" placeholder="Temporary password" />
+                <button class="primary-button" type="submit">Add user</button>
+              </form>
+              <div class="admin-list" id="userList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Admin dashboard</p><h2>Drivers</h2></div></div>
+              <form class="inline-form" id="driverForm"><input id="driverName" required placeholder="Driver name" /><input id="driverPhone" required placeholder="Phone" /><button class="primary-button" type="submit">Add driver</button></form>
+              <div class="admin-list" id="driverList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">Fleet and crane assets</p><h2>Equipment</h2></div></div>
+              <form class="inline-form" id="equipmentForm"><input id="equipmentName" required placeholder="Unit name" /><select id="equipmentType"><option>Crane</option><option>Truck</option><option>Trailer</option><option>Support</option></select><button class="primary-button" type="submit">Add equipment</button></form>
+              <div class="admin-list" id="equipmentList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="ticketCardTemplate">
+      <article class="ticket-card">
+        <div class="ticket-card-top"><div><span class="pill ticket-id"></span><h3></h3></div><span class="status-pill"></span></div>
+        <dl class="ticket-details"></dl>
+        <p class="ticket-notes"></p>
+        <div class="attachment-list"></div>
+        <div class="ticket-actions"></div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

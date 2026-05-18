@@ -1,0 +1,16 @@
+{
+  "name": "PRZ LLC Driver App",
+  "short_name": "PRZ Driver",
+  "description": "Driver work ticket app for PRZ LLC.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f4f6",
+  "theme_color": "#0a0a0c",
+  "icons": [
+    {
+      "src": "./prz-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
