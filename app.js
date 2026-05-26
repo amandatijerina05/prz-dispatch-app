@@ -921,6 +921,7 @@ function seedSampleDay() {
 
 document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const data = new FormData(event.currentTarget);
   const missing = missingDispatchFields(data);
   if (missing.length) {
@@ -959,7 +960,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     }).then(async ({ data: savedTicket, error }) => {
       if (error) return alert(error.message);
       notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
-      event.currentTarget.reset();
+      form.reset();
       document.querySelector("#jobDate").value = todayISO();
       await loadSupabaseReferenceData();
       setView("drivers");
@@ -984,11 +985,12 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
 
 document.querySelector("#driverForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const driver = { name: document.querySelector("#driverName").value.trim(), phone: document.querySelector("#driverPhone").value.trim() };
   if (supabaseSession) {
     supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
       if (error) return alert(error.message);
-      event.currentTarget.reset();
+      form.reset();
       await loadSupabaseReferenceData();
     });
     return;
@@ -1000,6 +1002,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
 
 document.querySelector("#equipmentForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const equipment = {
     name: document.querySelector("#equipmentName").value.trim(),
     type: document.querySelector("#equipmentType").value,
@@ -1010,7 +1013,7 @@ document.querySelector("#equipmentForm").addEventListener("submit", (event) => {
   if (supabaseSession) {
     supabaseClient.from("equipment").insert(equipment).then(async ({ error }) => {
       if (error) return alert(error.message);
-      event.currentTarget.reset();
+      form.reset();
       await loadSupabaseReferenceData();
     });
     return;
@@ -1041,6 +1044,7 @@ document.querySelector("#userForm").addEventListener("submit", (event) => {
 
 document.querySelector("#customerForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const customer = {
     name: document.querySelector("#customerName").value.trim(),
     contact: document.querySelector("#customerContact").value.trim(),
@@ -1051,7 +1055,7 @@ document.querySelector("#customerForm").addEventListener("submit", (event) => {
   if (supabaseSession) {
     supabaseClient.from("customers").insert(customer).then(async ({ error }) => {
       if (error) return alert(error.message);
-      event.currentTarget.reset();
+      form.reset();
       await loadSupabaseReferenceData();
     });
     return;
@@ -1063,6 +1067,7 @@ document.querySelector("#customerForm").addEventListener("submit", (event) => {
 
 document.querySelector("#maintenanceForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const maintenance = {
     equipment_id: document.querySelector("#maintenanceEquipment").value,
     due_date: document.querySelector("#maintenanceDue").value,
@@ -1072,7 +1077,7 @@ document.querySelector("#maintenanceForm").addEventListener("submit", (event) =>
   if (supabaseSession) {
     supabaseClient.from("maintenance_records").insert(maintenance).then(async ({ error }) => {
       if (error) return alert(error.message);
-      event.currentTarget.reset();
+      form.reset();
       await loadSupabaseReferenceData();
     });
     return;
