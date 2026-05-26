@@ -168,6 +168,11 @@ function fileNames(input) {
   return [...input.files].map((file) => file.name);
 }
 
+function isSignatureBlank(canvas) {
+  const pixels = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  return !pixels.some((value) => value !== 0);
+}
+
 function setView(name) {
   const allowed = permissions[state.role];
   const safeName = allowed.includes(name) ? name : allowed[0];
@@ -723,16 +728,29 @@ document.querySelector("#maintenanceForm").addEventListener("submit", (event) =>
 
 document.querySelector("#saveCompletion").addEventListener("click", () => {
   const ticketId = document.querySelector("#signatureTicketSelect").value;
-  if (!ticketId) return;
+  const noteField = document.querySelector("#driverNote");
+  const signerField = document.querySelector("#signerName");
   const canvas = document.querySelector("#signatureCanvas");
+  if (!ticketId || !noteField.value.trim() || !signerField.value.trim()) {
+    alert("Complete the ticket, driver note, and customer name before saving the packet.");
+    return;
+  }
+  if (isSignatureBlank(canvas)) {
+    alert("Customer signature is required before saving the completion packet.");
+    return;
+  }
   state.tickets = state.tickets.map((ticket) => ticket.id === ticketId ? {
     ...ticket,
-    driverNotes: document.querySelector("#driverNote").value.trim(),
+    driverNotes: noteField.value.trim(),
     driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(document.querySelector("#driverAttachment"))],
-    signerName: document.querySelector("#signerName").value.trim(),
+    signerName: signerField.value.trim(),
     customerSignature: canvas.toDataURL("image/png"),
   } : ticket);
   notify(`${ticketId} completion packet updated.`, "invoicing");
+  noteField.value = "";
+  signerField.value = "";
+  document.querySelector("#driverAttachment").value = "";
+  canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   renderAll();
 });
 

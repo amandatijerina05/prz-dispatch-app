@@ -95,25 +95,25 @@
               </div>
               <label>Job site<input id="site" name="site" required placeholder="Address, yard, or lease location" /></label>
               <div class="form-grid two">
-                <label>Service type<select id="serviceType" name="serviceType"><option>Crane lift</option><option>Trucking</option><option>Rig move</option><option>Haul off</option><option>Hot shot</option></select></label>
-                <label>Priority<select id="priority" name="priority"><option>Standard</option><option>High</option><option>Emergency</option></select></label>
+                <label>Service type<select id="serviceType" name="serviceType" required><option>Crane lift</option><option>Trucking</option><option>Rig move</option><option>Haul off</option><option>Hot shot</option></select></label>
+                <label>Priority<select id="priority" name="priority" required><option>Standard</option><option>High</option><option>Emergency</option></select></label>
               </div>
               <div class="form-grid two">
                 <label>Driver<select id="driver" name="driverId" required></select></label>
                 <label>Equipment<select id="equipment" name="equipmentId" required></select></label>
               </div>
               <div class="form-grid three">
-                <label>Start time<input id="startTime" name="startTime" type="time" /></label>
-                <label>Estimated hours<input id="hours" min="0.5" name="hours" step="0.5" type="number" value="4" /></label>
-                <label>Base rate<input id="rate" min="0" name="rate" step="25" type="number" value="175" /></label>
+                <label>Start time<input id="startTime" name="startTime" required type="time" /></label>
+                <label>Estimated hours<input id="hours" min="0.5" name="hours" required step="0.5" type="number" value="4" /></label>
+                <label>Base rate<input id="rate" min="0" name="rate" required step="25" type="number" value="175" /></label>
               </div>
               <div class="form-grid three">
-                <label>Mileage<input name="mileage" min="0" step="1" type="number" value="0" /></label>
-                <label>Fuel surcharge<input name="fuel" min="0" step="10" type="number" value="0" /></label>
-                <label>Minimum charge<input name="minimum" min="0" step="25" type="number" value="0" /></label>
+                <label>Mileage<input name="mileage" min="0" required step="1" type="number" value="0" /></label>
+                <label>Fuel surcharge<input name="fuel" min="0" required step="10" type="number" value="0" /></label>
+                <label>Minimum charge<input name="minimum" min="0" required step="25" type="number" value="0" /></label>
               </div>
               <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
-              <label>Work instructions<textarea id="notes" name="notes" rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
+              <label>Work instructions<textarea id="notes" name="notes" required rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
               <button class="primary-button" type="submit">Send work ticket to driver</button>
             </form>
 
@@ -150,10 +150,10 @@
               <div class="panel-heading">
                 <div><p class="eyebrow">Customer approval</p><h2>Signature and notes</h2></div>
               </div>
-              <label>Ticket<select id="signatureTicketSelect"></select></label>
-              <label>Driver completion note<textarea id="driverNote" rows="3" placeholder="Delays, extra work, load condition, customer notes"></textarea></label>
+              <label>Ticket<select id="signatureTicketSelect" required></select></label>
+              <label>Driver completion note<textarea id="driverNote" required rows="3" placeholder="Delays, extra work, load condition, customer notes"></textarea></label>
               <label>Photo or document attachment<input id="driverAttachment" type="file" multiple /></label>
-              <label>Customer name<input id="signerName" placeholder="Printed name" /></label>
+              <label>Customer name<input id="signerName" required placeholder="Printed name" /></label>
               <canvas id="signatureCanvas" width="620" height="180" aria-label="Signature pad"></canvas>
               <div class="quick-actions">
                 <button class="ghost-button" id="clearSignature" type="button">Clear signature</button>
