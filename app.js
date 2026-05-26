@@ -174,6 +174,35 @@ function isSignatureBlank(canvas) {
   return !pixels.some((value) => value !== 0);
 }
 
+function missingDispatchFields(data) {
+  const labels = {
+    customerId: "Customer",
+    jobDate: "Job date",
+    site: "Job site",
+    serviceType: "Service type",
+    priority: "Priority",
+    driverId: "Driver",
+    equipmentId: "Equipment",
+    startTime: "Start time",
+    hours: "Estimated hours",
+    rate: "Base rate",
+    mileage: "Mileage",
+    fuel: "Fuel surcharge",
+    minimum: "Minimum charge",
+    notes: "Work instructions",
+  };
+
+  return Object.entries(labels).filter(([field]) => {
+    const value = String(data.get(field) ?? "").trim();
+    if (!value) return true;
+    if (["hours", "rate", "mileage", "fuel", "minimum"].includes(field)) {
+      const number = Number(value);
+      return Number.isNaN(number) || number < 0 || (field === "hours" && number <= 0);
+    }
+    return false;
+  }).map(([, label]) => label);
+}
+
 function setView(name) {
   const allowed = permissions[state.role];
   const safeName = allowed.includes(name) ? name : allowed[0];
@@ -275,7 +304,7 @@ function buildTicketCard(ticket, context = "dispatch") {
     if (!["Invoiced", "Canceled"].includes(ticket.status)) {
       actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
     }
-    if (["admin", "dispatcher"].includes(state.role) && !closedStatuses.includes(ticket.status)) {
+    if (!closedStatuses.includes(ticket.status)) {
       actions.append(actionButton("Cancel ticket", () => cancelTicket(ticket.id), "danger-inline"));
     }
   }
@@ -646,6 +675,11 @@ function seedSampleDay() {
 document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
+  const missing = missingDispatchFields(data);
+  if (missing.length) {
+    alert(`Complete these required dispatch fields before sending:\n\n${missing.join("\n")}`);
+    return;
+  }
   const ticket = {
     id: ticketNumber(),
     customerId: data.get("customerId"),
