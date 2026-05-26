@@ -230,16 +230,17 @@ async function uploadTicketFiles(ticketDbId, ticketNumber, input, bucket, fileTy
 
   const uploaded = [];
   for (const file of files) {
-    const path = `${ticketNumber}/${crypto.randomUUID()}-${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `${ticketNumber}/${crypto.randomUUID()}-${safeName}`;
     const { error: uploadError } = await supabaseClient.storage.from(bucket).upload(path, file, { upsert: false });
-    if (uploadError) throw uploadError;
+    if (uploadError) throw new Error(`${bucket} upload failed: ${uploadError.message}`);
     const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
       ticket_id: ticketDbId,
       file_name: file.name,
       file_path: path,
       file_type: fileType,
     });
-    if (recordError) throw recordError;
+    if (recordError) throw new Error(`${fileType} attachment record failed: ${recordError.message}`);
     uploaded.push(file.name);
   }
   return uploaded;
@@ -253,13 +254,14 @@ async function uploadSignature(ticketDbId, ticketNumber, canvas) {
     contentType: "image/png",
     upsert: true,
   });
-  if (error) throw error;
-  await supabaseClient.from("ticket_attachments").insert({
+  if (error) throw new Error(`signature upload failed: ${error.message}`);
+  const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
     ticket_id: ticketDbId,
     file_name: "customer-signature.png",
     file_path: path,
     file_type: "signature",
   });
+  if (recordError) throw new Error(`signature attachment record failed: ${recordError.message}`);
   return path;
 }
 
@@ -1144,10 +1146,9 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
   }
   const currentTicket = state.tickets.find((ticket) => ticket.id === ticketId);
   if (supabaseSession && currentTicket?.dbId) {
-    Promise.all([
-      uploadTicketFiles(currentTicket.dbId, currentTicket.id, document.querySelector("#driverAttachment"), "driver-attachments", "driver"),
-      uploadSignature(currentTicket.dbId, currentTicket.id, canvas),
-    ]).then(([_, signaturePath]) => supabaseClient.from("work_tickets").update({
+    uploadTicketFiles(currentTicket.dbId, currentTicket.id, document.querySelector("#driverAttachment"), "driver-attachments", "driver")
+    .then(() => uploadSignature(currentTicket.dbId, currentTicket.id, canvas))
+    .then((signaturePath) => supabaseClient.from("work_tickets").update({
       driver_notes: noteField.value.trim(),
       signer_name: signerField.value.trim(),
       customer_signature_path: signaturePath,
@@ -1160,7 +1161,7 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
       await loadSupabaseReferenceData();
     }).catch((error) => {
-      alert(error.message);
+      alert(`Completion packet could not be saved.\n\n${error.message}`);
     });
     return;
   }
