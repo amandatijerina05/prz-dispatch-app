@@ -117,6 +117,61 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function mapCustomer(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    contact: row.contact,
+    terms: row.billing_terms,
+    site: row.default_site,
+    instructions: row.instructions,
+  };
+}
+
+function mapEquipment(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    status: row.status,
+    cert: row.certification_due,
+    nextService: row.next_service_due,
+  };
+}
+
+function mapMaintenance(row) {
+  return {
+    id: row.id,
+    equipmentId: row.equipment_id,
+    task: row.task,
+    due: row.due_date,
+    status: row.status,
+  };
+}
+
+async function loadSupabaseReferenceData() {
+  if (!supabaseClient || !supabaseSession) return;
+  const [customersResult, driversResult, equipmentResult, maintenanceResult] = await Promise.all([
+    supabaseClient.from("customers").select("*").eq("active", true).order("name"),
+    supabaseClient.from("drivers").select("*").eq("active", true).order("name"),
+    supabaseClient.from("equipment").select("*").order("name"),
+    supabaseClient.from("maintenance_records").select("*").order("due_date"),
+  ]);
+
+  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult].find((result) => result.error)?.error;
+  if (firstError) {
+    alert(`Supabase data load failed: ${firstError.message}`);
+    return;
+  }
+
+  state.customers = customersResult.data.map(mapCustomer);
+  state.drivers = driversResult.data;
+  state.equipment = equipmentResult.data.map(mapEquipment);
+  state.maintenance = maintenanceResult.data.map(mapMaintenance);
+  saveState();
+  renderAll();
+}
+
 function setSupabaseStatus(message, connected = false) {
   const status = document.querySelector("#supabaseStatus");
   status.textContent = message;
@@ -161,6 +216,7 @@ async function applySupabaseSession(session) {
   supabaseProfile = data;
   state.role = data.role;
   setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
+  await loadSupabaseReferenceData();
   renderAll();
 }
 
@@ -813,14 +869,38 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
 
 document.querySelector("#driverForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.drivers.push({ id: uid("drv"), name: document.querySelector("#driverName").value.trim(), phone: document.querySelector("#driverPhone").value.trim() });
+  const driver = { name: document.querySelector("#driverName").value.trim(), phone: document.querySelector("#driverPhone").value.trim() };
+  if (supabaseSession) {
+    supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      event.currentTarget.reset();
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.drivers.push({ id: uid("drv"), ...driver });
   event.currentTarget.reset();
   renderAll();
 });
 
 document.querySelector("#equipmentForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.equipment.push({ id: uid("eq"), name: document.querySelector("#equipmentName").value.trim(), type: document.querySelector("#equipmentType").value, status: "Available", cert: "2026-12-31", nextService: "2026-06-30" });
+  const equipment = {
+    name: document.querySelector("#equipmentName").value.trim(),
+    type: document.querySelector("#equipmentType").value,
+    status: "Available",
+    certification_due: "2026-12-31",
+    next_service_due: "2026-06-30",
+  };
+  if (supabaseSession) {
+    supabaseClient.from("equipment").insert(equipment).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      event.currentTarget.reset();
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.equipment.push({ id: uid("eq"), name: equipment.name, type: equipment.type, status: equipment.status, cert: equipment.certification_due, nextService: equipment.next_service_due });
   event.currentTarget.reset();
   renderAll();
 });
@@ -846,27 +926,43 @@ document.querySelector("#userForm").addEventListener("submit", (event) => {
 
 document.querySelector("#customerForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.customers.push({
-    id: uid("cus"),
+  const customer = {
     name: document.querySelector("#customerName").value.trim(),
     contact: document.querySelector("#customerContact").value.trim(),
-    terms: document.querySelector("#customerTerms").value.trim(),
-    site: document.querySelector("#customerSite").value.trim(),
+    billing_terms: document.querySelector("#customerTerms").value.trim(),
+    default_site: document.querySelector("#customerSite").value.trim(),
     instructions: document.querySelector("#customerInstructions").value.trim(),
-  });
+  };
+  if (supabaseSession) {
+    supabaseClient.from("customers").insert(customer).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      event.currentTarget.reset();
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.customers.push({ id: uid("cus"), name: customer.name, contact: customer.contact, terms: customer.billing_terms, site: customer.default_site, instructions: customer.instructions });
   event.currentTarget.reset();
   renderAll();
 });
 
 document.querySelector("#maintenanceForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.maintenance.push({
-    id: uid("mnt"),
-    equipmentId: document.querySelector("#maintenanceEquipment").value,
-    due: document.querySelector("#maintenanceDue").value,
+  const maintenance = {
+    equipment_id: document.querySelector("#maintenanceEquipment").value,
+    due_date: document.querySelector("#maintenanceDue").value,
     task: document.querySelector("#maintenanceTask").value.trim(),
     status: document.querySelector("#maintenanceStatus").value,
-  });
+  };
+  if (supabaseSession) {
+    supabaseClient.from("maintenance_records").insert(maintenance).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      event.currentTarget.reset();
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.maintenance.push({ id: uid("mnt"), equipmentId: maintenance.equipment_id, due: maintenance.due_date, task: maintenance.task, status: maintenance.status });
   event.currentTarget.reset();
   renderAll();
 });
