@@ -615,7 +615,12 @@ function downloadText(filename, text, type = "text/plain") {
 
 function exportCsv() {
   const rows = [["Ticket", "Customer", "Date", "Service", "Driver", "Equipment", "Status", "Amount", "Signed", "Files"]];
-  state.tickets.forEach((ticket) => rows.push([
+  const readyTickets = state.tickets.filter((ticket) => ticket.status === "Completed");
+  if (!readyTickets.length) {
+    alert("There are no completed tickets ready to export for invoicing.");
+    return;
+  }
+  readyTickets.forEach((ticket) => rows.push([
     ticket.id,
     customerName(ticket.customerId),
     ticket.jobDate,
@@ -627,7 +632,7 @@ function exportCsv() {
     ticket.signerName || "",
     [...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join("; "),
   ]));
-  downloadText("prz-invoicing-export.csv", rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"), "text/csv");
+  downloadText("prz-ready-for-invoicing.csv", rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"), "text/csv");
 }
 
 function exportPacket() {
