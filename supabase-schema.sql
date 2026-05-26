@@ -184,7 +184,7 @@ with check (current_app_role() = 'admin');
 create policy "allowed roles can read equipment"
 on equipment for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'maintenance'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing', 'maintenance'));
 
 create policy "admin and maintenance can manage equipment"
 on equipment for all
@@ -195,7 +195,7 @@ with check (current_app_role() in ('admin', 'maintenance'));
 create policy "office users can read customers"
 on customers for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'invoicing'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
 
 create policy "admin and dispatcher can manage customers"
 on customers for all

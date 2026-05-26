@@ -149,16 +149,80 @@ function mapMaintenance(row) {
   };
 }
 
+function mapTicket(row) {
+  return {
+    id: row.ticket_number,
+    dbId: row.id,
+    customerId: row.customer_id,
+    driverId: row.driver_id,
+    equipmentId: row.equipment_id,
+    jobDate: row.job_date,
+    site: row.job_site,
+    serviceType: row.service_type,
+    priority: row.priority,
+    startTime: row.scheduled_start?.slice(0, 5) || "",
+    hours: Number(row.estimated_hours || 0),
+    rate: Number(row.base_rate || 0),
+    mileage: Number(row.mileage || 0),
+    fuel: Number(row.fuel_surcharge || 0),
+    minimum: Number(row.minimum_charge || 0),
+    overtimeHours: Number(row.overtime_hours || 0),
+    notes: row.work_instructions,
+    status: row.status,
+    actualStart: row.actual_start?.slice(0, 5) || "",
+    actualEnd: row.actual_end?.slice(0, 5) || "",
+    driverNotes: row.driver_notes || "",
+    signerName: row.signer_name || "",
+    customerSignature: row.customer_signature_path || "",
+    completedAt: row.completed_at || "",
+    invoicedAt: row.invoiced_at || "",
+    attachments: [],
+    driverAttachments: [],
+    createdAt: row.created_at,
+  };
+}
+
+function ticketToSupabase(ticket) {
+  return {
+    ticket_number: ticket.id,
+    customer_id: ticket.customerId,
+    driver_id: ticket.driverId,
+    equipment_id: ticket.equipmentId,
+    job_date: ticket.jobDate,
+    job_site: ticket.site,
+    service_type: ticket.serviceType,
+    priority: ticket.priority,
+    scheduled_start: ticket.startTime,
+    estimated_hours: ticket.hours,
+    base_rate: ticket.rate,
+    mileage: ticket.mileage,
+    fuel_surcharge: ticket.fuel,
+    minimum_charge: ticket.minimum,
+    overtime_hours: ticket.overtimeHours,
+    work_instructions: ticket.notes,
+    status: ticket.status,
+  };
+}
+
+function nextTicketNumberFromRows(rows) {
+  const max = rows.reduce((highest, row) => {
+    const number = Number(String(row.ticket_number || "").replace("PRZ-", ""));
+    return Number.isNaN(number) ? highest : Math.max(highest, number);
+  }, 1047);
+  return max + 1;
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
-  const [customersResult, driversResult, equipmentResult, maintenanceResult] = await Promise.all([
+  const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
     supabaseClient.from("customers").select("*").eq("active", true).order("name"),
     supabaseClient.from("drivers").select("*").eq("active", true).order("name"),
     supabaseClient.from("equipment").select("*").order("name"),
     supabaseClient.from("maintenance_records").select("*").order("due_date"),
+    supabaseClient.from("work_tickets").select("*").order("created_at", { ascending: false }),
   ]);
 
-  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult].find((result) => result.error)?.error;
+  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult].find((result) => result.error)?.error;
   if (firstError) {
     alert(`Supabase data load failed: ${firstError.message}`);
     return;
@@ -168,6 +232,8 @@ async function loadSupabaseReferenceData() {
   state.drivers = driversResult.data;
   state.equipment = equipmentResult.data.map(mapEquipment);
   state.maintenance = maintenanceResult.data.map(mapMaintenance);
+  state.tickets = ticketsResult.data.map(mapTicket);
+  state.nextTicket = nextTicketNumberFromRows(ticketsResult.data);
   saveState();
   renderAll();
 }
@@ -674,18 +740,39 @@ function renderAll() {
   saveState();
 }
 
-function updateTicket(id, status) {
+async function updateTicket(id, status) {
   if (status === "Invoiced" && !["admin", "invoicing"].includes(state.role)) {
     alert("Only invoicing or admin users can mark a ticket as invoiced.");
     return;
   }
+  const currentTicket = state.tickets.find((ticket) => ticket.id === id);
+  const actualStart = status === "In Progress" && !currentTicket?.actualStart ? new Date().toTimeString().slice(0, 5) : currentTicket?.actualStart;
+  const actualEnd = status === "Completed" && !currentTicket?.actualEnd ? new Date().toTimeString().slice(0, 5) : currentTicket?.actualEnd;
+  if (supabaseSession && currentTicket?.dbId) {
+    const update = {
+      status,
+      actual_start: actualStart || null,
+      actual_end: actualEnd || null,
+      completed_at: status === "Completed" ? new Date().toISOString() : currentTicket.completedAt || null,
+      invoiced_at: status === "Invoiced" ? new Date().toISOString() : currentTicket.invoicedAt || null,
+      canceled_at: status === "Canceled" ? new Date().toISOString() : null,
+    };
+    const { error } = await supabaseClient.from("work_tickets").update(update).eq("id", currentTicket.dbId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await loadSupabaseReferenceData();
+    return;
+  }
+
   state.tickets = state.tickets.map((ticket) => {
     if (ticket.id !== id) return ticket;
     const next = { ...ticket, status };
-    if (status === "In Progress" && !next.actualStart) next.actualStart = new Date().toTimeString().slice(0, 5);
+    if (status === "In Progress" && !next.actualStart) next.actualStart = actualStart;
     if (status === "Completed") {
       next.completedAt = new Date().toISOString();
-      if (!next.actualEnd) next.actualEnd = new Date().toTimeString().slice(0, 5);
+      if (!next.actualEnd) next.actualEnd = actualEnd;
     }
     if (status === "Invoiced") next.invoicedAt = new Date().toISOString();
     return next;
@@ -855,6 +942,19 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     status: "Sent",
     createdAt: new Date().toISOString(),
   };
+  if (supabaseSession) {
+    supabaseClient.from("work_tickets").insert(ticketToSupabase(ticket)).select("*").single().then(async ({ data: savedTicket, error }) => {
+      if (error) return alert(error.message);
+      notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
+      event.currentTarget.reset();
+      document.querySelector("#jobDate").value = todayISO();
+      await loadSupabaseReferenceData();
+      setView("drivers");
+      document.querySelector("#driverQueueSelect").value = savedTicket.driver_id;
+      renderDriverQueue();
+    });
+    return;
+  }
   state.tickets.push(ticket);
   state.nextTicket += 1;
   updateEquipmentFromTickets(ticket.equipmentId);
@@ -978,6 +1078,23 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
   }
   if (isSignatureBlank(canvas)) {
     alert("Customer signature is required before saving the completion packet.");
+    return;
+  }
+  const currentTicket = state.tickets.find((ticket) => ticket.id === ticketId);
+  if (supabaseSession && currentTicket?.dbId) {
+    supabaseClient.from("work_tickets").update({
+      driver_notes: noteField.value.trim(),
+      signer_name: signerField.value.trim(),
+      customer_signature_path: "signature-saved-in-browser-demo",
+    }).eq("id", currentTicket.dbId).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      notify(`${ticketId} completion packet updated.`, "invoicing");
+      noteField.value = "";
+      signerField.value = "";
+      document.querySelector("#driverAttachment").value = "";
+      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+      await loadSupabaseReferenceData();
+    });
     return;
   }
   state.tickets = state.tickets.map((ticket) => ticket.id === ticketId ? {
