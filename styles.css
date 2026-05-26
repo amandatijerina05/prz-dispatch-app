@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -114,6 +118,22 @@ button {
   background: #161619;
   color: var(--white);
   text-transform: none;
+}
+
+.role-card strong {
+  display: none;
+  color: var(--white);
+  font-size: 1rem;
+  text-transform: none;
+}
+
+body.supabase-connected .role-card select,
+body.supabase-connected .demo-actions {
+  display: none;
+}
+
+body.supabase-connected .role-card strong {
+  display: block;
 }
 
 .connection-card {

@@ -67,6 +67,7 @@ let signatureDrawing = false;
 let deferredInstallPrompt = null;
 let supabaseClient = null;
 let supabaseSession = null;
+let supabaseProfile = null;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -120,8 +121,47 @@ function setSupabaseStatus(message, connected = false) {
   const status = document.querySelector("#supabaseStatus");
   status.textContent = message;
   status.classList.toggle("connected", connected);
+  document.body.classList.toggle("supabase-connected", connected);
   document.querySelector("#authForm").hidden = connected;
   document.querySelector("#signOutButton").hidden = !connected;
+}
+
+function roleLabel(role) {
+  return {
+    admin: "Admin",
+    dispatcher: "Dispatcher",
+    driver: "Driver",
+    invoicing: "Invoicing",
+    maintenance: "Maintenance",
+  }[role] || role;
+}
+
+async function applySupabaseSession(session) {
+  supabaseSession = session;
+  supabaseProfile = null;
+
+  if (!session?.user?.email) {
+    setSupabaseStatus("Ready for login");
+    renderAll();
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("app_users")
+    .select("full_name, role")
+    .eq("auth_user_id", session.user.id)
+    .eq("active", true)
+    .single();
+
+  if (error || !data) {
+    setSupabaseStatus(`${session.user.email} needs role setup`, true);
+    return;
+  }
+
+  supabaseProfile = data;
+  state.role = data.role;
+  setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
+  renderAll();
 }
 
 async function initSupabase() {
@@ -137,20 +177,10 @@ async function initSupabase() {
     return;
   }
 
-  supabaseSession = data.session;
-  if (supabaseSession?.user?.email) {
-    setSupabaseStatus(supabaseSession.user.email, true);
-  } else {
-    setSupabaseStatus("Ready for login");
-  }
+  await applySupabaseSession(data.session);
 
   supabaseClient.auth.onAuthStateChange((_event, session) => {
-    supabaseSession = session;
-    if (session?.user?.email) {
-      setSupabaseStatus(session.user.email, true);
-    } else {
-      setSupabaseStatus("Ready for login");
-    }
+    applySupabaseSession(session);
   });
 }
 
@@ -279,6 +309,7 @@ function applyRole() {
     button.hidden = !allowed.includes(button.dataset.view);
   });
   document.querySelector("#roleSelect").value = state.role;
+  document.querySelector("#activeRoleLabel").textContent = roleLabel(state.role);
   document.body.classList.toggle("driver-mode", state.role === "driver");
   document.body.classList.toggle("maintenance-mode", state.role === "maintenance");
   const active = document.querySelector(".nav-tab.active")?.dataset.view;
