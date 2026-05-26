@@ -1,9 +1,10 @@
-const CACHE_NAME = "prz-driver-shell-v10";
+const CACHE_NAME = "prz-driver-shell-v11";
 const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./supabase-config.js",
   "./manifest.webmanifest",
   "./prz-logo.webp",
   "./prz-icon.png",

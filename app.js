@@ -65,6 +65,8 @@ let state = loadState();
 let invoiceFilter = "ready";
 let signatureDrawing = false;
 let deferredInstallPrompt = null;
+let supabaseClient = null;
+let supabaseSession = null;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -112,6 +114,62 @@ function normalizeState(data) {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function setSupabaseStatus(message, connected = false) {
+  const status = document.querySelector("#supabaseStatus");
+  status.textContent = message;
+  status.classList.toggle("connected", connected);
+  document.querySelector("#authForm").hidden = connected;
+  document.querySelector("#signOutButton").hidden = !connected;
+}
+
+async function initSupabase() {
+  if (!window.supabase || !window.PRZ_SUPABASE) {
+    setSupabaseStatus("Local demo mode");
+    return;
+  }
+
+  supabaseClient = window.supabase.createClient(window.PRZ_SUPABASE.url, window.PRZ_SUPABASE.publishableKey);
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    setSupabaseStatus("Connection issue");
+    return;
+  }
+
+  supabaseSession = data.session;
+  if (supabaseSession?.user?.email) {
+    setSupabaseStatus(supabaseSession.user.email, true);
+  } else {
+    setSupabaseStatus("Ready for login");
+  }
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    supabaseSession = session;
+    if (session?.user?.email) {
+      setSupabaseStatus(session.user.email, true);
+    } else {
+      setSupabaseStatus("Ready for login");
+    }
+  });
+}
+
+async function signInWithSupabase(email, password) {
+  if (!supabaseClient) {
+    alert("Supabase is not connected yet.");
+    return;
+  }
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  document.querySelector("#authForm").reset();
+}
+
+async function signOutOfSupabase() {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
 }
 
 function uid(prefix) {
@@ -836,6 +894,11 @@ document.querySelector("#clearNotifications").addEventListener("click", () => {
   state.notifications = [];
   renderAll();
 });
+document.querySelector("#authForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await signInWithSupabase(document.querySelector("#authEmail").value.trim(), document.querySelector("#authPassword").value);
+});
+document.querySelector("#signOutButton").addEventListener("click", signOutOfSupabase);
 
 const canvas = document.querySelector("#signatureCanvas");
 const ctx = canvas.getContext("2d");
@@ -893,4 +956,5 @@ if ("serviceWorker" in navigator) {
 document.querySelector("#todayLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 document.querySelector("#jobDate").value = todayISO();
 document.querySelector("#maintenanceDue").value = todayISO();
+initSupabase();
 renderAll();

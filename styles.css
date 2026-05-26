@@ -108,11 +108,39 @@ button {
   text-transform: uppercase;
 }
 
-.role-card select {
+.role-card select,
+.connection-card input {
   border-color: rgba(255, 255, 255, 0.22);
   background: #161619;
   color: var(--white);
   text-transform: none;
+}
+
+.connection-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.connection-card strong {
+  color: var(--white);
+  font-size: 0.9rem;
+}
+
+.connection-card strong.connected {
+  color: #79e5a2;
+}
+
+.connection-card form {
+  display: grid;
+  gap: 8px;
+}
+
+.connection-card .primary-button,
+.connection-card .ghost-button {
+  width: 100%;
 }
 
 .nav-tab {

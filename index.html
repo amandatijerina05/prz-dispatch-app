@@ -33,6 +33,17 @@
           </select>
         </label>
 
+        <section class="connection-card">
+          <span class="system-label">Supabase</span>
+          <strong id="supabaseStatus">Not signed in</strong>
+          <form id="authForm">
+            <input id="authEmail" autocomplete="email" type="email" placeholder="Email" />
+            <input id="authPassword" autocomplete="current-password" type="password" placeholder="Password" />
+            <button class="primary-button" type="submit">Sign in</button>
+          </form>
+          <button class="ghost-button" id="signOutButton" type="button" hidden>Sign out</button>
+        </section>
+
         <nav class="nav-tabs" aria-label="Application sections">
           <button class="nav-tab active" data-view="dispatch" data-roles="admin,dispatcher" type="button"><span class="tab-icon">DT</span>Dispatch</button>
           <button class="nav-tab" data-view="drivers" data-roles="admin,dispatcher,driver" type="button"><span class="tab-icon">DR</span>Driver Mobile</button>
@@ -291,6 +302,8 @@
       </article>
     </template>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./supabase-config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
