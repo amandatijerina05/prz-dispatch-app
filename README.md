@@ -48,3 +48,8 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 - `service-worker.js` for offline shell caching
 - Mobile ticket filters for current and completed work
 - Signature, notes, and attachment capture in the driver workflow
+
+## Supabase Setup Files
+
+- `supabase-schema.sql` creates the production database tables and security policies.
+- `supabase-seed.sql` adds starter PRZ drivers, equipment, customers, and maintenance records.
