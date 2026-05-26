@@ -229,6 +229,12 @@ button {
   color: var(--white);
 }
 
+.danger-inline {
+  background: #fff1f1;
+  border-color: #ffd2d5;
+  color: var(--red-dark);
+}
+
 .segment.active {
   background: var(--red);
   color: var(--white);
@@ -470,6 +476,12 @@ button:focus-visible {
 .status-Invoiced {
   background: #ececf0;
   color: #31333a;
+}
+
+.status-Canceled {
+  background: #fff1f1;
+  color: var(--red-dark);
+  border-color: #ffd2d5;
 }
 
 .ticket-details {

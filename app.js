@@ -67,6 +67,7 @@ let signatureDrawing = false;
 let deferredInstallPrompt = null;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const closedStatuses = ["Completed", "Invoiced", "Canceled"];
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -206,7 +207,7 @@ function renderSelects() {
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
   const activeTicketOptions = state.tickets
-    .filter((ticket) => ticket.status !== "Invoiced")
+    .filter((ticket) => !["Invoiced", "Canceled"].includes(ticket.status))
     .map((ticket) => `<option value="${ticket.id}">${ticket.id} - ${customerName(ticket.customerId)}</option>`)
     .join("");
 
@@ -222,7 +223,7 @@ function renderSelects() {
 }
 
 function renderStats() {
-  const open = state.tickets.filter((ticket) => !["Completed", "Invoiced"].includes(ticket.status)).length;
+  const open = state.tickets.filter((ticket) => !closedStatuses.includes(ticket.status)).length;
   const withDrivers = state.tickets.filter((ticket) => ["Sent", "Accepted", "In Progress"].includes(ticket.status)).length;
   const ready = state.tickets.filter((ticket) => ticket.status === "Completed").length;
   const revenue = state.tickets.reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
@@ -271,14 +272,19 @@ function buildTicketCard(ticket, context = "dispatch") {
     if (ticket.status === "Accepted") actions.append(actionButton("Start work", () => updateTicket(ticket.id, "In Progress")));
     if (ticket.status === "In Progress") actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
   } else {
-    if (ticket.status !== "Invoiced") actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
+    if (!["Invoiced", "Canceled"].includes(ticket.status)) {
+      actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
+    }
+    if (["admin", "dispatcher"].includes(state.role) && !closedStatuses.includes(ticket.status)) {
+      actions.append(actionButton("Cancel ticket", () => cancelTicket(ticket.id), "danger-inline"));
+    }
   }
   return card;
 }
 
-function actionButton(label, handler) {
+function actionButton(label, handler, extraClass = "") {
   const button = document.createElement("button");
-  button.className = "small-button";
+  button.className = `small-button ${extraClass}`.trim();
   button.type = "button";
   button.textContent = label;
   button.addEventListener("click", handler);
@@ -301,7 +307,7 @@ function renderDriverQueue() {
   const select = document.querySelector("#driverQueueSelect");
   const driverId = select.value || state.drivers[0]?.id;
   if (driverId && select.value !== driverId) select.value = driverId;
-  const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && ticket.status !== "Invoiced").sort((a, b) => a.jobDate.localeCompare(b.jobDate));
+  const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status)).sort((a, b) => a.jobDate.localeCompare(b.jobDate));
   const activeCount = tickets.filter((ticket) => ticket.status !== "Completed").length;
   const completedCount = tickets.filter((ticket) => ticket.status === "Completed").length;
   const driver = findDriver(driverId);
@@ -322,7 +328,7 @@ function renderDriverQueue() {
 function focusDriverTickets(mode) {
   const select = document.querySelector("#driverQueueSelect");
   const driverId = select.value || state.drivers[0]?.id;
-  const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && ticket.status !== "Invoiced");
+  const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status));
   const visibleTickets = mode === "completed"
     ? tickets.filter((ticket) => ticket.status === "Completed")
     : tickets.filter((ticket) => ticket.status !== "Completed");
@@ -516,19 +522,30 @@ function updateTicket(id, status) {
   renderAll();
 }
 
+function cancelTicket(id) {
+  if (!["admin", "dispatcher"].includes(state.role)) {
+    alert("Only dispatch or admin users can cancel a work ticket.");
+    return;
+  }
+  const ticket = state.tickets.find((item) => item.id === id);
+  if (!ticket || closedStatuses.includes(ticket.status)) return;
+  if (!confirm(`Cancel work ticket ${id}?`)) return;
+  updateTicket(id, "Canceled");
+}
+
 function updateEquipmentFromTickets(equipmentId) {
   const hasActive = state.tickets.some((ticket) => ticket.equipmentId === equipmentId && ["Sent", "Accepted", "In Progress"].includes(ticket.status));
   state.equipment = state.equipment.map((item) => item.id === equipmentId ? { ...item, status: hasActive ? "Assigned" : item.status === "Assigned" ? "Available" : item.status } : item);
 }
 
 function removeDriver(id) {
-  if (state.tickets.some((ticket) => ticket.driverId === id && ticket.status !== "Invoiced")) return alert("This driver has open tickets.");
+  if (state.tickets.some((ticket) => ticket.driverId === id && !["Invoiced", "Canceled"].includes(ticket.status))) return alert("This driver has open tickets.");
   state.drivers = state.drivers.filter((driver) => driver.id !== id);
   renderAll();
 }
 
 function removeEquipment(id) {
-  if (state.tickets.some((ticket) => ticket.equipmentId === id && ticket.status !== "Invoiced")) return alert("This equipment has open tickets.");
+  if (state.tickets.some((ticket) => ticket.equipmentId === id && !["Invoiced", "Canceled"].includes(ticket.status))) return alert("This equipment has open tickets.");
   state.equipment = state.equipment.filter((item) => item.id !== id);
   renderAll();
 }
