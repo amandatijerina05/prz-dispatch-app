@@ -265,6 +265,21 @@ async function uploadSignature(ticketDbId, ticketNumber, canvas) {
   return path;
 }
 
+function withSaveTimeout(promise, seconds, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), seconds * 1000);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function setCompletionSaving(isSaving) {
+  const button = document.querySelector("#saveCompletion");
+  if (!button) return;
+  button.disabled = isSaving;
+  button.textContent = isSaving ? "Saving..." : "Save completion packet";
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
   const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
@@ -1131,10 +1146,11 @@ document.querySelector("#maintenanceForm").addEventListener("submit", (event) =>
   renderAll();
 });
 
-document.querySelector("#saveCompletion").addEventListener("click", () => {
+document.querySelector("#saveCompletion").addEventListener("click", async () => {
   const ticketId = document.querySelector("#signatureTicketSelect").value;
   const noteField = document.querySelector("#driverNote");
   const signerField = document.querySelector("#signerName");
+  const attachmentInput = document.querySelector("#driverAttachment");
   const canvas = document.querySelector("#signatureCanvas");
   if (!ticketId || !noteField.value.trim() || !signerField.value.trim()) {
     alert("Complete the ticket, driver note, and customer name before saving the packet.");
@@ -1145,37 +1161,62 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
     return;
   }
   const currentTicket = state.tickets.find((ticket) => ticket.id === ticketId);
+  if (!currentTicket) {
+    alert("That ticket could not be found. Refresh the app and try again.");
+    return;
+  }
   if (supabaseSession && currentTicket?.dbId) {
-    uploadTicketFiles(currentTicket.dbId, currentTicket.id, document.querySelector("#driverAttachment"), "driver-attachments", "driver")
-    .then(() => uploadSignature(currentTicket.dbId, currentTicket.id, canvas))
-    .then((signaturePath) => supabaseClient.from("work_tickets").update({
-      driver_notes: noteField.value.trim(),
-      signer_name: signerField.value.trim(),
-      customer_signature_path: signaturePath,
-    }).eq("id", currentTicket.dbId)).then(async ({ error }) => {
-      if (error) return alert(error.message);
+    setCompletionSaving(true);
+    try {
+      await withSaveTimeout(
+        uploadTicketFiles(currentTicket.dbId, currentTicket.id, attachmentInput, "driver-attachments", "driver"),
+        45,
+        "Driver attachment upload timed out. Try a smaller photo or check your connection.",
+      );
+      const signaturePath = await withSaveTimeout(
+        uploadSignature(currentTicket.dbId, currentTicket.id, canvas),
+        45,
+        "Customer signature upload timed out. Try saving again.",
+      );
+      const { error } = await withSaveTimeout(
+        supabaseClient.from("work_tickets").update({
+          driver_notes: noteField.value.trim(),
+          signer_name: signerField.value.trim(),
+          customer_signature_path: signaturePath,
+        }).eq("id", currentTicket.dbId),
+        30,
+        "Ticket update timed out. Try saving again.",
+      );
+      if (error) throw new Error(`ticket completion update failed: ${error.message}`);
       notify(`${ticketId} completion packet updated.`, "invoicing");
       noteField.value = "";
       signerField.value = "";
-      document.querySelector("#driverAttachment").value = "";
+      attachmentInput.value = "";
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
       await loadSupabaseReferenceData();
-    }).catch((error) => {
+      alert("Completion packet saved.");
+    } catch (error) {
       alert(`Completion packet could not be saved.\n\n${error.message}`);
-    });
+    } finally {
+      setCompletionSaving(false);
+    }
+    return;
+  }
+  if (supabaseSession && !currentTicket.dbId) {
+    alert("This ticket has not synced to Supabase yet. Refresh the app and try again.");
     return;
   }
   state.tickets = state.tickets.map((ticket) => ticket.id === ticketId ? {
     ...ticket,
     driverNotes: noteField.value.trim(),
-    driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(document.querySelector("#driverAttachment"))],
+    driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(attachmentInput)],
     signerName: signerField.value.trim(),
     customerSignature: canvas.toDataURL("image/png"),
   } : ticket);
   notify(`${ticketId} completion packet updated.`, "invoicing");
   noteField.value = "";
   signerField.value = "";
-  document.querySelector("#driverAttachment").value = "";
+  attachmentInput.value = "";
   canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   renderAll();
 });
