@@ -212,6 +212,16 @@ function nextTicketNumberFromRows(rows) {
   return max + 1;
 }
 
+async function nextSupabaseTicketNumber() {
+  const { data, error } = await supabaseClient
+    .from("work_tickets")
+    .select("ticket_number")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return `PRZ-${String(nextTicketNumberFromRows(data)).padStart(4, "0")}`;
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
   const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
@@ -943,7 +953,10 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     createdAt: new Date().toISOString(),
   };
   if (supabaseSession) {
-    supabaseClient.from("work_tickets").insert(ticketToSupabase(ticket)).select("*").single().then(async ({ data: savedTicket, error }) => {
+    nextSupabaseTicketNumber().then((nextNumber) => {
+      ticket.id = nextNumber;
+      return supabaseClient.from("work_tickets").insert(ticketToSupabase(ticket)).select("*").single();
+    }).then(async ({ data: savedTicket, error }) => {
       if (error) return alert(error.message);
       notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
       event.currentTarget.reset();
@@ -952,6 +965,8 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
       setView("drivers");
       document.querySelector("#driverQueueSelect").value = savedTicket.driver_id;
       renderDriverQueue();
+    }).catch((error) => {
+      alert(error.message);
     });
     return;
   }
