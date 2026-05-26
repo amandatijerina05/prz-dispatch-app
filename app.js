@@ -150,6 +150,8 @@ function mapMaintenance(row) {
 }
 
 function mapTicket(row) {
+  const attachments = (row.ticket_attachments || []).filter((file) => file.file_type === "dispatch").map((file) => file.file_name);
+  const driverAttachments = (row.ticket_attachments || []).filter((file) => file.file_type === "driver").map((file) => file.file_name);
   return {
     id: row.ticket_number,
     dbId: row.id,
@@ -176,8 +178,8 @@ function mapTicket(row) {
     customerSignature: row.customer_signature_path || "",
     completedAt: row.completed_at || "",
     invoicedAt: row.invoiced_at || "",
-    attachments: [],
-    driverAttachments: [],
+    attachments,
+    driverAttachments,
     createdAt: row.created_at,
   };
 }
@@ -222,6 +224,45 @@ async function nextSupabaseTicketNumber() {
   return `PRZ-${String(nextTicketNumberFromRows(data)).padStart(4, "0")}`;
 }
 
+async function uploadTicketFiles(ticketDbId, ticketNumber, input, bucket, fileType) {
+  const files = [...input.files];
+  if (!files.length) return [];
+
+  const uploaded = [];
+  for (const file of files) {
+    const path = `${ticketNumber}/${crypto.randomUUID()}-${file.name}`;
+    const { error: uploadError } = await supabaseClient.storage.from(bucket).upload(path, file, { upsert: false });
+    if (uploadError) throw uploadError;
+    const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
+      ticket_id: ticketDbId,
+      file_name: file.name,
+      file_path: path,
+      file_type: fileType,
+    });
+    if (recordError) throw recordError;
+    uploaded.push(file.name);
+  }
+  return uploaded;
+}
+
+async function uploadSignature(ticketDbId, ticketNumber, canvas) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("Could not save signature image.");
+  const path = `${ticketNumber}/signature-${Date.now()}.png`;
+  const { error } = await supabaseClient.storage.from("signatures").upload(path, blob, {
+    contentType: "image/png",
+    upsert: true,
+  });
+  if (error) throw error;
+  await supabaseClient.from("ticket_attachments").insert({
+    ticket_id: ticketDbId,
+    file_name: "customer-signature.png",
+    file_path: path,
+    file_type: "signature",
+  });
+  return path;
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
   const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
@@ -229,7 +270,7 @@ async function loadSupabaseReferenceData() {
     supabaseClient.from("drivers").select("*").eq("active", true).order("name"),
     supabaseClient.from("equipment").select("*").order("name"),
     supabaseClient.from("maintenance_records").select("*").order("due_date"),
-    supabaseClient.from("work_tickets").select("*").order("created_at", { ascending: false }),
+    supabaseClient.from("work_tickets").select("*, ticket_attachments(*)").order("created_at", { ascending: false }),
   ]);
 
   const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult].find((result) => result.error)?.error;
@@ -959,6 +1000,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
       return supabaseClient.from("work_tickets").insert(ticketToSupabase(ticket)).select("*").single();
     }).then(async ({ data: savedTicket, error }) => {
       if (error) return alert(error.message);
+      await uploadTicketFiles(savedTicket.id, savedTicket.ticket_number, document.querySelector("#ticketFiles"), "ticket-attachments", "dispatch");
       notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
       form.reset();
       document.querySelector("#jobDate").value = todayISO();
@@ -1102,11 +1144,14 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
   }
   const currentTicket = state.tickets.find((ticket) => ticket.id === ticketId);
   if (supabaseSession && currentTicket?.dbId) {
-    supabaseClient.from("work_tickets").update({
+    Promise.all([
+      uploadTicketFiles(currentTicket.dbId, currentTicket.id, document.querySelector("#driverAttachment"), "driver-attachments", "driver"),
+      uploadSignature(currentTicket.dbId, currentTicket.id, canvas),
+    ]).then(([_, signaturePath]) => supabaseClient.from("work_tickets").update({
       driver_notes: noteField.value.trim(),
       signer_name: signerField.value.trim(),
-      customer_signature_path: "signature-saved-in-browser-demo",
-    }).eq("id", currentTicket.dbId).then(async ({ error }) => {
+      customer_signature_path: signaturePath,
+    }).eq("id", currentTicket.dbId)).then(async ({ error }) => {
       if (error) return alert(error.message);
       notify(`${ticketId} completion packet updated.`, "invoicing");
       noteField.value = "";
@@ -1114,6 +1159,8 @@ document.querySelector("#saveCompletion").addEventListener("click", () => {
       document.querySelector("#driverAttachment").value = "";
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
       await loadSupabaseReferenceData();
+    }).catch((error) => {
+      alert(error.message);
     });
     return;
   }
