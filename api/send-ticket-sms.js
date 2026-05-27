@@ -55,8 +55,8 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (!process.env.TELNYX_API_KEY || !process.env.TELNYX_FROM_NUMBER) {
-    sendJson(response, 503, { error: "Telnyx is not configured yet. Add TELNYX_API_KEY and TELNYX_FROM_NUMBER in Vercel." });
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_FROM_NUMBER) {
+    sendJson(response, 503, { error: "Twilio is not configured yet. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in Vercel." });
     return;
   }
 
@@ -80,25 +80,27 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const telnyxResponse = await fetch("https://api.telnyx.com/v2/messages", {
+  const twilioBody = new URLSearchParams({
+    From: process.env.TWILIO_FROM_NUMBER,
+    To: to,
+    Body: ticketMessage(payload),
+  });
+  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString("base64");
+  const twilioResponse = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
-      "content-type": "application/json",
+      authorization: `Basic ${auth}`,
+      "content-type": "application/x-www-form-urlencoded",
     },
-    body: JSON.stringify({
-      from: process.env.TELNYX_FROM_NUMBER,
-      to,
-      text: ticketMessage(payload),
-    }),
+    body: twilioBody,
   });
 
-  const result = await telnyxResponse.json().catch(() => ({}));
-  if (!telnyxResponse.ok) {
-    const message = result.errors?.[0]?.detail || result.errors?.[0]?.title || "Telnyx could not send the message.";
-    sendJson(response, telnyxResponse.status, { error: message });
+  const result = await twilioResponse.json().catch(() => ({}));
+  if (!twilioResponse.ok) {
+    const message = result.message || "Twilio could not send the message.";
+    sendJson(response, twilioResponse.status, { error: message });
     return;
   }
 
-  sendJson(response, 200, { ok: true, messageId: result.data?.id || "" });
+  sendJson(response, 200, { ok: true, messageId: result.sid || "" });
 };
