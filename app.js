@@ -346,6 +346,34 @@ function setCompletionSaving(isSaving) {
   button.textContent = isSaving ? "Saving..." : "Save completion packet";
 }
 
+async function sendWorkTicketSms(ticket) {
+  if (!supabaseSession?.access_token) return { sent: false, error: "SMS skipped because the user is not signed in." };
+  const driver = findDriver(ticket.driverId);
+  const equipment = findEquipment(ticket.equipmentId);
+  const response = await fetch("/api/send-ticket-sms", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${supabaseSession.access_token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ticketNumber: ticket.id,
+      customerName: customerName(ticket.customerId),
+      driverName: driver?.name || "",
+      driverPhone: driver?.phone || "",
+      equipmentName: equipment ? `${equipment.name} (${equipment.type})` : "",
+      jobDate: ticket.jobDate,
+      startTime: ticket.startTime,
+      serviceType: ticket.serviceType,
+      site: ticket.site,
+      priority: ticket.priority,
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return { sent: false, error: result.error || "SMS could not be sent." };
+  return { sent: true, messageId: result.messageId || "" };
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
   const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
@@ -1083,8 +1111,11 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
       return supabaseClient.from("work_tickets").insert(ticketToSupabase(ticket)).select("*").single();
     }).then(async ({ data: savedTicket, error }) => {
       if (error) return alert(error.message);
+      ticket.id = savedTicket.ticket_number;
       await uploadTicketFiles(savedTicket.id, savedTicket.ticket_number, document.querySelector("#ticketFiles"), "ticket-attachments", "dispatch");
+      const smsResult = await sendWorkTicketSms(ticket);
       notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
+      if (!smsResult.sent) notify(`${ticket.id} was saved, but SMS was not sent: ${smsResult.error}`, "dispatch");
       form.reset();
       document.querySelector("#jobDate").value = todayISO();
       await loadSupabaseReferenceData();

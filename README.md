@@ -21,6 +21,7 @@ This is a self-contained browser prototype for PRZ LLC dispatch operations.
 - Notification log for dispatch, driver, invoicing, and admin events
 - Reports for customer revenue, equipment workload, and uninvoiced work
 - Admin dashboard for adding and removing drivers and equipment
+- Telnyx SMS work ticket delivery through a Vercel serverless function
 - PRZ LLC branding with the provided logo and red, black, and white styling
 - Local browser storage so demo data stays in the browser until cleared
 
@@ -53,3 +54,19 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 
 - `supabase-schema.sql` creates the production database tables and security policies.
 - `supabase-seed.sql` adds starter PRZ drivers, equipment, customers, and maintenance records.
+- `supabase-storage-policies.sql` enables ticket attachment, driver photo, and signature uploads.
+- `supabase-clean-duplicate-attachments.sql` removes duplicate attachment records from earlier testing.
+
+## Production Environment Variables
+
+Add these in Vercel under the project settings before sending live SMS messages:
+
+```text
+TELNYX_API_KEY=your Telnyx API key
+TELNYX_FROM_NUMBER=your Telnyx phone number, such as +14325551234
+APP_BASE_URL=https://przdispatch.com
+SUPABASE_URL=https://izhgssrghucowblrkfhw.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your Supabase publishable key
+```
+
+`TELNYX_API_KEY` must stay private and should only be stored in Vercel, never in browser JavaScript.
