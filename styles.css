@@ -71,6 +71,7 @@ body.login-screen .app-shell {
 }
 
 body.login-screen .sidebar {
+  gap: 20px;
   min-height: 0;
   padding: 24px;
   border-right: 0;
@@ -79,12 +80,17 @@ body.login-screen .sidebar {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
 }
 
-body.login-screen .brand,
 body.login-screen .role-card,
 body.login-screen .nav-tabs,
 body.login-screen .sidebar-footer,
 body.login-screen .workspace {
   display: none;
+}
+
+body.login-screen .brand {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 104px;
 }
 
 .brand {
@@ -103,6 +109,11 @@ body.login-screen .workspace {
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+body.login-screen .brand img {
+  width: 96px;
+  height: 96px;
+}
+
 .brand span,
 .system-label,
 .eyebrow {
@@ -119,6 +130,19 @@ body.login-screen .workspace {
   margin-top: 4px;
   font-size: 1.12rem;
   line-height: 1.15;
+}
+
+.login-brand-title {
+  display: none;
+}
+
+body.login-screen .app-brand-title {
+  display: none;
+}
+
+body.login-screen .login-brand-title {
+  display: inline;
+  font-size: 1.35rem;
 }
 
 .nav-tabs {
