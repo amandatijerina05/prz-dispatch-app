@@ -68,6 +68,7 @@ let deferredInstallPrompt = null;
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
+let completionSaveInProgress = false;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -150,8 +151,8 @@ function mapMaintenance(row) {
 }
 
 function mapTicket(row) {
-  const attachments = (row.ticket_attachments || []).filter((file) => file.file_type === "dispatch").map((file) => file.file_name);
-  const driverAttachments = (row.ticket_attachments || []).filter((file) => file.file_type === "driver").map((file) => file.file_name);
+  const attachments = uniqueNames((row.ticket_attachments || []).filter((file) => file.file_type === "dispatch").map((file) => file.file_name));
+  const driverAttachments = uniqueNames((row.ticket_attachments || []).filter((file) => file.file_type === "driver").map((file) => file.file_name));
   return {
     id: row.ticket_number,
     dbId: row.id,
@@ -206,6 +207,54 @@ function ticketToSupabase(ticket) {
   };
 }
 
+function uniqueNames(names) {
+  return [...new Set((names || []).filter(Boolean))];
+}
+
+function extensionlessName(name) {
+  return name.replace(/\.[^/.]+$/, "");
+}
+
+function imageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image attachment."));
+    };
+    image.src = url;
+  });
+}
+
+async function prepareFileForUpload(file, optimizeImages = false) {
+  const original = { body: file, fileName: file.name, storageName: file.name, contentType: file.type };
+  if (!optimizeImages || !file.type.startsWith("image/") || file.type === "image/gif" || file.size < 750000) return original;
+  try {
+    const image = await imageFromFile(file);
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.78));
+    if (!blob || blob.size >= file.size) return original;
+    return {
+      body: blob,
+      fileName: file.name,
+      storageName: `${extensionlessName(file.name)}.jpg`,
+      contentType: "image/jpeg",
+    };
+  } catch {
+    return original;
+  }
+}
+
 function nextTicketNumberFromRows(rows) {
   const max = rows.reduce((highest, row) => {
     const number = Number(String(row.ticket_number || "").replace("PRZ-", ""));
@@ -224,24 +273,41 @@ async function nextSupabaseTicketNumber() {
   return `PRZ-${String(nextTicketNumberFromRows(data)).padStart(4, "0")}`;
 }
 
-async function uploadTicketFiles(ticketDbId, ticketNumber, input, bucket, fileType) {
+async function uploadTicketFiles(ticketDbId, ticketNumber, input, bucket, fileType, options = {}) {
   const files = [...input.files];
   if (!files.length) return [];
 
+  let existingNames = new Set();
+  if (options.skipDuplicateNames) {
+    const { data, error } = await supabaseClient
+      .from("ticket_attachments")
+      .select("file_name")
+      .eq("ticket_id", ticketDbId)
+      .eq("file_type", fileType);
+    if (error) throw new Error(`Could not check existing attachments: ${error.message}`);
+    existingNames = new Set((data || []).map((file) => file.file_name));
+  }
+
   const uploaded = [];
   for (const file of files) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    if (existingNames.has(file.name)) continue;
+    const preparedFile = await prepareFileForUpload(file, options.optimizeImages);
+    const safeName = preparedFile.storageName.replace(/[^a-zA-Z0-9._-]/g, "-");
     const path = `${ticketNumber}/${crypto.randomUUID()}-${safeName}`;
-    const { error: uploadError } = await supabaseClient.storage.from(bucket).upload(path, file, { upsert: false });
+    const { error: uploadError } = await supabaseClient.storage.from(bucket).upload(path, preparedFile.body, {
+      contentType: preparedFile.contentType || undefined,
+      upsert: false,
+    });
     if (uploadError) throw new Error(`${bucket} upload failed: ${uploadError.message}`);
     const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
       ticket_id: ticketDbId,
-      file_name: file.name,
+      file_name: preparedFile.fileName,
       file_path: path,
       file_type: fileType,
     });
     if (recordError) throw new Error(`${fileType} attachment record failed: ${recordError.message}`);
-    uploaded.push(file.name);
+    existingNames.add(file.name);
+    uploaded.push(preparedFile.fileName);
   }
   return uploaded;
 }
@@ -569,7 +635,7 @@ function buildTicketCard(ticket, context = "dispatch") {
   card.querySelector(".ticket-details").innerHTML = ticketDetails(ticket).map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
   card.querySelector(".ticket-notes").textContent = ticket.notes || "No special instructions added.";
 
-  const allFiles = [...(ticket.attachments || []), ...(ticket.driverAttachments || [])];
+  const allFiles = uniqueNames([...(ticket.attachments || []), ...(ticket.driverAttachments || [])]);
   card.querySelector(".attachment-list").innerHTML = allFiles.length
     ? allFiles.map((name) => `<span class="file-chip">${name}</span>`).join("")
     : `<span class="muted-small">No attachments yet</span>`;
@@ -1147,6 +1213,7 @@ document.querySelector("#maintenanceForm").addEventListener("submit", (event) =>
 });
 
 document.querySelector("#saveCompletion").addEventListener("click", async () => {
+  if (completionSaveInProgress) return;
   const ticketId = document.querySelector("#signatureTicketSelect").value;
   const noteField = document.querySelector("#driverNote");
   const signerField = document.querySelector("#signerName");
@@ -1166,10 +1233,14 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
     return;
   }
   if (supabaseSession && currentTicket?.dbId) {
+    completionSaveInProgress = true;
     setCompletionSaving(true);
     try {
       await withSaveTimeout(
-        uploadTicketFiles(currentTicket.dbId, currentTicket.id, attachmentInput, "driver-attachments", "driver"),
+        uploadTicketFiles(currentTicket.dbId, currentTicket.id, attachmentInput, "driver-attachments", "driver", {
+          optimizeImages: true,
+          skipDuplicateNames: true,
+        }),
         45,
         "Driver attachment upload timed out. Try a smaller photo or check your connection.",
       );
@@ -1198,6 +1269,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
     } catch (error) {
       alert(`Completion packet could not be saved.\n\n${error.message}`);
     } finally {
+      completionSaveInProgress = false;
       setCompletionSaving(false);
     }
     return;
