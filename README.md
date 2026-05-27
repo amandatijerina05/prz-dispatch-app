@@ -6,6 +6,7 @@ This is a self-contained browser prototype for PRZ LLC dispatch operations.
 
 - Dispatcher work ticket entry
 - Role-based access for admin, dispatcher, driver, invoicing, and maintenance users
+- Login-only signed-out screen with automatic inactivity sign-out
 - Driver assignment and mobile-style driver queue
 - Installable driver PWA with home-screen support and offline app shell
 - Ticket status flow: Sent, Accepted, In Progress, Completed, Invoiced

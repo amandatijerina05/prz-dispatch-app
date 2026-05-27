@@ -29,6 +29,12 @@ body {
     sans-serif;
 }
 
+body.login-screen {
+  display: grid;
+  min-height: 100vh;
+  background: var(--black);
+}
+
 button,
 input,
 select,
@@ -46,6 +52,13 @@ button {
   min-height: 100vh;
 }
 
+body.login-screen .app-shell {
+  grid-template-columns: minmax(0, 420px);
+  place-content: center;
+  width: 100%;
+  padding: 24px;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -55,6 +68,23 @@ button {
   background: var(--black);
   color: var(--white);
   border-right: 6px solid var(--red);
+}
+
+body.login-screen .sidebar {
+  min-height: 0;
+  padding: 24px;
+  border-right: 0;
+  border-top: 6px solid var(--red);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+body.login-screen .brand,
+body.login-screen .role-card,
+body.login-screen .nav-tabs,
+body.login-screen .sidebar-footer,
+body.login-screen .workspace {
+  display: none;
 }
 
 .brand {
@@ -142,6 +172,11 @@ body.supabase-connected .role-card strong {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
+}
+
+body.login-screen .connection-card {
+  padding: 0;
+  border: 0;
 }
 
 .connection-card strong {

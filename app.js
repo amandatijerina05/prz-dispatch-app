@@ -1,4 +1,5 @@
 const STORAGE_KEY = "prz-dispatch-app-v2";
+const INACTIVITY_TIMEOUT_MINUTES = 30;
 
 const permissions = {
   admin: ["dispatch", "drivers", "invoicing", "customers", "operations", "maintenance", "reports", "notifications", "admin"],
@@ -69,6 +70,7 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
 let completionSaveInProgress = false;
+let inactivityTimer = null;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -405,8 +407,30 @@ function setSupabaseStatus(message, connected = false) {
   status.textContent = message;
   status.classList.toggle("connected", connected);
   document.body.classList.toggle("supabase-connected", connected);
+  document.body.classList.toggle("login-screen", Boolean(supabaseClient) && !connected);
   document.querySelector("#authForm").hidden = connected;
   document.querySelector("#signOutButton").hidden = !connected;
+}
+
+function clearInactivityTimer() {
+  if (!inactivityTimer) return;
+  clearTimeout(inactivityTimer);
+  inactivityTimer = null;
+}
+
+function resetInactivityTimer() {
+  clearInactivityTimer();
+  if (!supabaseSession) return;
+  inactivityTimer = setTimeout(async () => {
+    alert(`You have been signed out after ${INACTIVITY_TIMEOUT_MINUTES} minutes of inactivity.`);
+    await signOutOfSupabase();
+  }, INACTIVITY_TIMEOUT_MINUTES * 60 * 1000);
+}
+
+function trackUserActivity() {
+  ["click", "keydown", "input", "mousemove", "touchstart", "scroll"].forEach((eventName) => {
+    window.addEventListener(eventName, resetInactivityTimer, { passive: true });
+  });
 }
 
 function roleLabel(role) {
@@ -424,6 +448,7 @@ async function applySupabaseSession(session) {
   supabaseProfile = null;
 
   if (!session?.user?.email) {
+    clearInactivityTimer();
     setSupabaseStatus("Ready for login");
     renderAll();
     return;
@@ -444,6 +469,7 @@ async function applySupabaseSession(session) {
   supabaseProfile = data;
   state.role = data.role;
   setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
+  resetInactivityTimer();
   await loadSupabaseReferenceData();
   renderAll();
 }
@@ -1409,6 +1435,7 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./service-worker.js");
 }
 
+trackUserActivity();
 document.querySelector("#todayLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 document.querySelector("#jobDate").value = todayISO();
 document.querySelector("#maintenanceDue").value = todayISO();
