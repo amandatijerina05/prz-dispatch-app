@@ -482,6 +482,12 @@ function setAuthFormLoading(loading) {
   button.textContent = loading ? "Signing in..." : "Sign in";
 }
 
+function setSignOutLoading(loading) {
+  const button = document.querySelector("#signOutButton");
+  button.disabled = loading;
+  button.textContent = loading ? "Signing out..." : "Sign out";
+}
+
 function clearInactivityTimer() {
   if (!inactivityTimer) return;
   clearTimeout(inactivityTimer);
@@ -595,7 +601,18 @@ async function signInWithSupabase(email, password) {
 
 async function signOutOfSupabase() {
   if (!supabaseClient) return;
-  await supabaseClient.auth.signOut();
+  setSignOutLoading(true);
+  setSupabaseStatus("Signing out...", true);
+  clearInactivityTimer();
+
+  const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+  setSignOutLoading(false);
+  if (error) {
+    setSupabaseStatus(supabaseProfile ? `${supabaseProfile.full_name} (${roleLabel(supabaseProfile.role)})` : "Signed in", true);
+    alert(error.message);
+    return;
+  }
+  await applySupabaseSession(null);
 }
 
 function uid(prefix) {
