@@ -152,6 +152,16 @@ function mapMaintenance(row) {
   };
 }
 
+function mapUser(row) {
+  return {
+    id: row.id,
+    authUserId: row.auth_user_id,
+    name: row.full_name,
+    username: row.username,
+    role: row.role,
+  };
+}
+
 function mapTicket(row) {
   const attachments = uniqueNames((row.ticket_attachments || []).filter((file) => file.file_type === "dispatch").map((file) => file.file_name));
   const driverAttachments = uniqueNames((row.ticket_attachments || []).filter((file) => file.file_type === "driver").map((file) => file.file_name));
@@ -378,15 +388,16 @@ async function sendWorkTicketSms(ticket) {
 
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
-  const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult] = await Promise.all([
+  const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, usersResult] = await Promise.all([
     supabaseClient.from("customers").select("*").eq("active", true).order("name"),
     supabaseClient.from("drivers").select("*").eq("active", true).order("name"),
     supabaseClient.from("equipment").select("*").order("name"),
     supabaseClient.from("maintenance_records").select("*").order("due_date"),
     supabaseClient.from("work_tickets").select("*, ticket_attachments(*)").order("created_at", { ascending: false }),
+    supabaseClient.from("app_users").select("*").eq("active", true).order("full_name"),
   ]);
 
-  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult].find((result) => result.error)?.error;
+  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, usersResult].find((result) => result.error)?.error;
   if (firstError) {
     alert(`Supabase data load failed: ${firstError.message}`);
     return;
@@ -397,6 +408,7 @@ async function loadSupabaseReferenceData() {
   state.equipment = equipmentResult.data.map(mapEquipment);
   state.maintenance = maintenanceResult.data.map(mapMaintenance);
   state.tickets = ticketsResult.data.map(mapTicket);
+  state.users = usersResult.data.map(mapUser);
   state.nextTicket = nextTicketNumberFromRows(ticketsResult.data);
   saveState();
   renderAll();
@@ -634,6 +646,7 @@ function renderSelects() {
   const equipmentOptions = availableEquipment.map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+  const driverUserOptions = `<option value="">No login user</option>${state.users.filter((user) => user.role === "driver").map((user) => `<option value="${user.id}">${user.name} (${user.username})</option>`).join("")}`;
   const activeTicketOptions = state.tickets
     .filter((ticket) => !["Invoiced", "Canceled"].includes(ticket.status))
     .map((ticket) => `<option value="${ticket.id}">${ticket.id} - ${customerName(ticket.customerId)}</option>`)
@@ -644,6 +657,7 @@ function renderSelects() {
   document.querySelector("#equipment").innerHTML = equipmentOptions;
   document.querySelector("#customerSelect").innerHTML = customerOptions;
   document.querySelector("#maintenanceEquipment").innerHTML = maintenanceOptions;
+  document.querySelector("#driverUser").innerHTML = driverUserOptions;
   document.querySelector("#signatureTicketSelect").innerHTML = activeTicketOptions || `<option value="">No open tickets</option>`;
 
   if (state.drivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
@@ -1011,16 +1025,47 @@ function removeUser(id) {
     alert("Keep at least one admin user.");
     return;
   }
+  if (supabaseSession) {
+    adminUserRequest("DELETE", { appUserId: id }).then(async ({ error }) => {
+      if (error) return alert(error);
+      notify(`${user?.name || "User"} removed from user access.`, "admin");
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
   state.users = state.users.filter((item) => item.id !== id);
   notify(`${user?.name || "User"} removed from user access.`, "admin");
   renderAll();
 }
 
 function resetPassword(id, password) {
-  state.users = state.users.map((user) => user.id === id ? { ...user, password } : user);
   const user = state.users.find((item) => item.id === id);
+  if (supabaseSession) {
+    adminUserRequest("PATCH", { authUserId: user?.authUserId, password }).then(({ error }) => {
+      if (error) return alert(error);
+      notify(`Password reset for ${user?.name || "user"}.`, "admin");
+      renderAll();
+    });
+    return;
+  }
+  state.users = state.users.map((user) => user.id === id ? { ...user, password } : user);
   notify(`Password reset for ${user?.name || "user"}.`, "admin");
   renderAll();
+}
+
+async function adminUserRequest(method, body) {
+  if (!supabaseSession?.access_token) return { error: "Sign in as an admin first." };
+  const response = await fetch("/api/admin-users", {
+    method,
+    headers: {
+      authorization: `Bearer ${supabaseSession.access_token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return { error: result.error || "User management request failed." };
+  return result;
 }
 
 function downloadText(filename, text, type = "text/plain") {
@@ -1168,7 +1213,11 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
 document.querySelector("#driverForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.currentTarget;
-  const driver = { name: document.querySelector("#driverName").value.trim(), phone: document.querySelector("#driverPhone").value.trim() };
+  const driver = {
+    name: document.querySelector("#driverName").value.trim(),
+    phone: document.querySelector("#driverPhone").value.trim(),
+    user_id: document.querySelector("#driverUser").value || null,
+  };
   if (supabaseSession) {
     supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
       if (error) return alert(error.message);
@@ -1177,7 +1226,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
     });
     return;
   }
-  state.drivers.push({ id: uid("drv"), ...driver });
+  state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id });
   event.currentTarget.reset();
   renderAll();
 });
@@ -1207,19 +1256,35 @@ document.querySelector("#equipmentForm").addEventListener("submit", (event) => {
 
 document.querySelector("#userForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const username = document.querySelector("#userUsername").value.trim();
+  const form = event.currentTarget;
+  const username = document.querySelector("#userUsername").value.trim().toLowerCase();
   if (state.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
     alert("That username already exists.");
     return;
   }
-  state.users.push({
-    id: uid("usr"),
-    name: document.querySelector("#userName").value.trim(),
-    username,
+  const user = {
+    fullName: document.querySelector("#userName").value.trim(),
+    email: username,
     role: document.querySelector("#userRole").value,
     password: document.querySelector("#userPassword").value,
+  };
+  if (supabaseSession) {
+    adminUserRequest("POST", user).then(async ({ error }) => {
+      if (error) return alert(error);
+      notify(`${user.fullName} added as ${user.role}.`, "admin");
+      form.reset();
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.users.push({
+    id: uid("usr"),
+    name: user.fullName,
+    username,
+    role: user.role,
+    password: user.password,
   });
-  notify(`${document.querySelector("#userName").value.trim()} added as ${document.querySelector("#userRole").value}.`, "admin");
+  notify(`${user.fullName} added as ${user.role}.`, "admin");
   event.currentTarget.reset();
   renderAll();
 });

@@ -265,7 +265,7 @@
               <div class="panel-heading"><div><p class="eyebrow">User access</p><h2>Users and passwords</h2></div></div>
               <form class="user-form" id="userForm">
                 <input id="userName" required placeholder="Full name" />
-                <input id="userUsername" required placeholder="Username" />
+                <input id="userUsername" required type="email" placeholder="Email address" />
                 <select id="userRole">
                   <option value="dispatcher">Dispatcher</option>
                   <option value="driver">Driver</option>
@@ -280,7 +280,7 @@
             </section>
             <section class="panel">
               <div class="panel-heading"><div><p class="eyebrow">Admin dashboard</p><h2>Drivers</h2></div></div>
-              <form class="inline-form" id="driverForm"><input id="driverName" required placeholder="Driver name" /><input id="driverPhone" required placeholder="Phone" /><button class="primary-button" type="submit">Add driver</button></form>
+              <form class="inline-form" id="driverForm"><input id="driverName" required placeholder="Driver name" /><input id="driverPhone" required placeholder="Phone" /><select id="driverUser"><option value="">No login user</option></select><button class="primary-button" type="submit">Add driver</button></form>
               <div class="admin-list" id="driverList"></div>
             </section>
             <section class="panel">

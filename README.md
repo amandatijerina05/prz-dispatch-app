@@ -60,7 +60,7 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 
 ## Production Environment Variables
 
-Add these in Vercel under the project settings before sending live SMS messages:
+Add these in Vercel under the project settings for production features:
 
 ```text
 TWILIO_ACCOUNT_SID=your Twilio Account SID
@@ -69,6 +69,7 @@ TWILIO_FROM_NUMBER=your Twilio phone number, such as +14325551234
 APP_BASE_URL=https://przdispatch.com
 SUPABASE_URL=https://izhgssrghucowblrkfhw.supabase.co
 SUPABASE_PUBLISHABLE_KEY=your Supabase publishable key
+SUPABASE_SERVICE_ROLE_KEY=your Supabase service role key
 ```
 
-`TWILIO_AUTH_TOKEN` must stay private and should only be stored in Vercel, never in browser JavaScript.
+`TWILIO_AUTH_TOKEN` and `SUPABASE_SERVICE_ROLE_KEY` must stay private and should only be stored in Vercel, never in browser JavaScript.
