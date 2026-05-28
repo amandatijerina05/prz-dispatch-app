@@ -553,6 +553,7 @@ async function applySupabaseSession(session) {
   document.querySelector("#authForm").reset();
   setAuthFormLoading(false);
   resetInactivityTimer();
+  renderAll();
   await loadSupabaseReferenceData();
   renderAll();
 }
