@@ -1014,6 +1014,11 @@ function renderAdmin() {
         <span>Units: ${driver.assignedEquipmentIds?.length ? driver.assignedEquipmentIds.map((id) => findEquipment(id)?.name || id).join(", ") : "Any matching unit"}</span>
       </div>
       <form class="driver-assignment-form" data-id="${driver.id}">
+        <div class="unit-builder-row">
+          <input class="existing-driver-unit-name" placeholder="New unit name or number" />
+          <select class="existing-driver-unit-type">${equipmentTypeOptions()}</select>
+          <button class="small-button add-existing-driver-unit" type="button">Add unit</button>
+        </div>
         <select class="driver-type-assignment" multiple aria-label="Equipment types for ${driver.name}">
           ${EQUIPMENT_TYPES.map((type) => `<option value="${type}" ${driver.equipmentTypes?.includes(type) ? "selected" : ""}>${type}</option>`).join("")}
         </select>
@@ -1028,6 +1033,7 @@ function renderAdmin() {
     <div class="admin-row"><div><strong>${item.name}</strong><span>${item.type} | ${item.status}</span></div><button class="small-button remove-equipment" data-id="${item.id}" type="button">Remove</button></div>`).join("");
   document.querySelectorAll(".remove-driver").forEach((button) => button.addEventListener("click", () => removeDriver(button.dataset.id)));
   document.querySelectorAll(".driver-assignment-form").forEach((form) => form.addEventListener("submit", updateDriverAssignments));
+  document.querySelectorAll(".add-existing-driver-unit").forEach((button) => button.addEventListener("click", addUnitToExistingDriver));
   document.querySelectorAll(".remove-equipment").forEach((button) => button.addEventListener("click", () => removeEquipment(button.dataset.id)));
   document.querySelectorAll(".remove-user").forEach((button) => button.addEventListener("click", () => removeUser(button.dataset.id)));
   document.querySelectorAll(".password-form").forEach((form) => form.addEventListener("submit", (event) => {
@@ -1137,6 +1143,43 @@ function updateDriverAssignments(event) {
     return;
   }
   state.drivers = state.drivers.map((driver) => driver.id === id ? { ...driver, equipmentTypes: equipment_types, assignedEquipmentIds: assigned_equipment_ids } : driver);
+  renderAll();
+}
+
+async function addUnitToExistingDriver(event) {
+  const form = event.currentTarget.closest(".driver-assignment-form");
+  const driver = findDriver(form.dataset.id);
+  const nameField = form.querySelector(".existing-driver-unit-name");
+  const typeField = form.querySelector(".existing-driver-unit-type");
+  const name = nameField.value.trim();
+  const type = typeField.value;
+  if (!name) {
+    alert("Enter a unit name before adding it to the driver.");
+    return;
+  }
+
+  let createdUnit;
+  try {
+    [createdUnit] = await createEquipmentUnitsForDriver([{ name, type }]);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+
+  const equipment_types = uniqueValues([...(driver?.equipmentTypes || []), createdUnit.type]);
+  const assigned_equipment_ids = uniqueValues([...(driver?.assignedEquipmentIds || []), createdUnit.id]);
+
+  if (supabaseSession) {
+    const { error } = await supabaseClient.from("drivers").update({ equipment_types, assigned_equipment_ids }).eq("id", driver.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await loadSupabaseReferenceData();
+    return;
+  }
+
+  state.drivers = state.drivers.map((item) => item.id === driver.id ? { ...item, equipmentTypes: equipment_types, assignedEquipmentIds: assigned_equipment_ids } : item);
   renderAll();
 }
 
