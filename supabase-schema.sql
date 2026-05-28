@@ -5,7 +5,7 @@ create table if not exists app_users (
   auth_user_id uuid unique,
   full_name text not null,
   username text unique not null,
-  role text not null check (role in ('admin', 'dispatcher', 'driver', 'invoicing', 'maintenance')),
+  role text not null check (role in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing', 'maintenance')),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -61,7 +61,7 @@ create table if not exists work_tickets (
   minimum_charge numeric(10,2) not null default 0 check (minimum_charge >= 0),
   overtime_hours numeric(8,2) not null default 0 check (overtime_hours >= 0),
   work_instructions text not null,
-  status text not null default 'Sent' check (status in ('Sent', 'Accepted', 'In Progress', 'Completed', 'Invoiced', 'Canceled')),
+  status text not null default 'Sent' check (status in ('Sent', 'Accepted', 'In Progress', 'Completed', 'Out for Signature', 'PO Stamp', 'Final Submitted', 'Paid', 'Final Approved', 'Invoiced', 'Canceled')),
   actual_start time,
   actual_end time,
   driver_notes text,
@@ -175,7 +175,7 @@ with check (current_app_role() = 'admin');
 create policy "operations users can read drivers"
 on drivers for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing'));
 
 create policy "admins can manage drivers"
 on drivers for all
@@ -186,7 +186,7 @@ with check (current_app_role() = 'admin');
 create policy "allowed roles can read equipment"
 on equipment for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing', 'maintenance'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing', 'maintenance'));
 
 create policy "admin and maintenance can manage equipment"
 on equipment for all
@@ -197,7 +197,7 @@ with check (current_app_role() in ('admin', 'maintenance'));
 create policy "office users can read customers"
 on customers for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing'));
 
 create policy "admin and dispatcher can manage customers"
 on customers for all
@@ -209,7 +209,7 @@ create policy "role based ticket read"
 on work_tickets for select
 to authenticated
 using (
-  current_app_role() in ('admin', 'dispatcher', 'invoicing')
+  current_app_role() in ('admin', 'dispatcher', 'approver', 'invoicing')
   or (
     current_app_role() = 'driver'
     and driver_id in (select id from drivers where user_id in (select id from app_users where auth_user_id = auth.uid()))
@@ -225,14 +225,14 @@ create policy "role based ticket updates"
 on work_tickets for update
 to authenticated
 using (
-  current_app_role() in ('admin', 'dispatcher', 'invoicing')
+  current_app_role() in ('admin', 'dispatcher', 'approver', 'invoicing')
   or (
     current_app_role() = 'driver'
     and driver_id in (select id from drivers where user_id in (select id from app_users where auth_user_id = auth.uid()))
   )
 )
 with check (
-  current_app_role() in ('admin', 'dispatcher', 'invoicing')
+  current_app_role() in ('admin', 'dispatcher', 'approver', 'invoicing')
   or (
     current_app_role() = 'driver'
     and driver_id in (select id from drivers where user_id in (select id from app_users where auth_user_id = auth.uid()))
@@ -242,7 +242,7 @@ with check (
 create policy "authenticated users can read ticket files"
 on ticket_attachments for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing'));
 
 create policy "authenticated users can add ticket files"
 on ticket_attachments for insert
@@ -252,12 +252,12 @@ with check (current_app_role() in ('admin', 'dispatcher', 'driver'));
 create policy "authenticated users can read status history"
 on ticket_status_history for select
 to authenticated
-using (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
+using (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing'));
 
 create policy "authenticated users can add status history"
 on ticket_status_history for insert
 to authenticated
-with check (current_app_role() in ('admin', 'dispatcher', 'driver', 'invoicing'));
+with check (current_app_role() in ('admin', 'dispatcher', 'driver', 'approver', 'invoicing'));
 
 create policy "maintenance users can read records"
 on maintenance_records for select

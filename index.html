@@ -29,6 +29,7 @@
             <option value="admin">Admin</option>
             <option value="dispatcher">Dispatcher</option>
             <option value="driver">Driver</option>
+            <option value="approver">Approver</option>
             <option value="invoicing">Invoicing</option>
             <option value="maintenance">Maintenance</option>
           </select>
@@ -48,12 +49,12 @@
         <nav class="nav-tabs" aria-label="Application sections">
           <button class="nav-tab active" data-view="dispatch" data-roles="admin,dispatcher" type="button"><span class="tab-icon">DT</span>Dispatch</button>
           <button class="nav-tab" data-view="drivers" data-roles="admin,dispatcher,driver" type="button"><span class="tab-icon">DR</span>Driver Mobile</button>
-          <button class="nav-tab" data-view="invoicing" data-roles="admin,invoicing" type="button"><span class="tab-icon">INV</span>Invoicing</button>
-          <button class="nav-tab" data-view="customers" data-roles="admin,dispatcher,invoicing" type="button"><span class="tab-icon">CUS</span>Customers</button>
+          <button class="nav-tab" data-view="invoicing" data-roles="admin,approver,invoicing" type="button"><span class="tab-icon">INV</span>Invoicing</button>
+          <button class="nav-tab" data-view="customers" data-roles="admin,dispatcher,approver,invoicing" type="button"><span class="tab-icon">CUS</span>Customers</button>
           <button class="nav-tab" data-view="operations" data-roles="admin,dispatcher" type="button"><span class="tab-icon">OPS</span>Calendar & Map</button>
           <button class="nav-tab" data-view="maintenance" data-roles="admin,maintenance" type="button"><span class="tab-icon">MNT</span>Maintenance</button>
           <button class="nav-tab" data-view="reports" data-roles="admin" type="button"><span class="tab-icon">RPT</span>Reports</button>
-          <button class="nav-tab" data-view="notifications" data-roles="admin,dispatcher,driver,invoicing" type="button"><span class="tab-icon">MSG</span>Notifications</button>
+          <button class="nav-tab" data-view="notifications" data-roles="admin,dispatcher,driver,approver,invoicing" type="button"><span class="tab-icon">MSG</span>Notifications</button>
           <button class="nav-tab" data-view="admin" data-roles="admin" type="button"><span class="tab-icon">ADM</span>Admin</button>
         </nav>
 
@@ -136,7 +137,7 @@
                   <h2>Active tickets</h2>
                 </div>
                 <select id="statusFilter" aria-label="Filter tickets by status">
-                  <option value="all">All statuses</option><option>Sent</option><option>Accepted</option><option>In Progress</option><option>Completed</option><option>Invoiced</option><option>Canceled</option>
+                  <option value="all">All statuses</option><option>Sent</option><option>Accepted</option><option>In Progress</option><option>Completed</option><option>Out for Signature</option><option>PO Stamp</option><option>Final Submitted</option><option>Paid</option><option>Final Approved</option><option>Invoiced</option><option>Canceled</option>
                 </select>
               </div>
               <div class="ticket-list" id="ticketList"></div>
@@ -272,6 +273,7 @@
                 <select id="userRole">
                   <option value="dispatcher">Dispatcher</option>
                   <option value="driver">Driver</option>
+                  <option value="approver">Approver</option>
                   <option value="invoicing">Invoicing</option>
                   <option value="maintenance">Maintenance</option>
                   <option value="admin">Admin</option>

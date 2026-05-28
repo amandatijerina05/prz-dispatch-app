@@ -6,6 +6,7 @@ const permissions = {
   admin: ["dispatch", "drivers", "invoicing", "customers", "operations", "maintenance", "reports", "notifications", "admin"],
   dispatcher: ["dispatch", "drivers", "customers", "operations", "notifications"],
   driver: ["drivers", "notifications"],
+  approver: ["invoicing", "customers", "notifications"],
   invoicing: ["invoicing", "customers", "notifications"],
   maintenance: ["maintenance"],
 };
@@ -79,7 +80,9 @@ let adminUsersLoading = false;
 let adminUsersLoadStatus = "";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const closedStatuses = ["Completed", "Invoiced", "Canceled"];
+const approvalStatuses = ["Out for Signature", "PO Stamp", "Final Submitted", "Paid", "Final Approved"];
+const invoiceWorkflowStatuses = ["Completed", ...approvalStatuses, "Invoiced"];
+const closedStatuses = ["Completed", ...approvalStatuses, "Invoiced", "Canceled"];
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -516,6 +519,7 @@ function roleLabel(role) {
     admin: "Admin",
     dispatcher: "Dispatcher",
     driver: "Driver",
+    approver: "Approver",
     invoicing: "Invoicing",
     maintenance: "Maintenance",
   }[normalized] || role;
@@ -527,6 +531,7 @@ function normalizeRole(role) {
     adminrole: "admin",
     dispatcherrole: "dispatcher",
     driverrole: "driver",
+    approverrole: "approver",
     invoicingrole: "invoicing",
     maintenancerole: "maintenance",
   }[value] || value.replace(/role$/, "");
@@ -895,7 +900,7 @@ function renderSelects() {
 function renderStats() {
   const open = state.tickets.filter((ticket) => !closedStatuses.includes(ticket.status)).length;
   const withDrivers = state.tickets.filter((ticket) => ["Sent", "Accepted", "In Progress"].includes(ticket.status)).length;
-  const ready = state.tickets.filter((ticket) => ticket.status === "Completed").length;
+  const ready = state.tickets.filter((ticket) => ticket.status === "Final Approved").length;
   const revenue = state.tickets.reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
   document.querySelector("#openCount").textContent = open;
   document.querySelector("#driverCount").textContent = withDrivers;
@@ -1015,13 +1020,18 @@ function focusDriverTickets(mode) {
 
 function renderInvoices() {
   const rows = document.querySelector("#invoiceRows");
-  const tickets = state.tickets.filter((ticket) => invoiceFilter === "all" || ticket.status === "Completed").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const tickets = state.tickets
+    .filter((ticket) => invoiceFilter === "all" || invoiceWorkflowStatuses.includes(ticket.status))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   if (!tickets.length) {
     rows.innerHTML = `<tr><td colspan="8">No tickets are ready for invoicing.</td></tr>`;
     return;
   }
   rows.innerHTML = tickets.map((ticket) => {
-    const disabled = ticket.status !== "Completed" ? "disabled" : "";
+    const canChangeApproval = ["admin", "approver", "invoicing"].includes(state.role) && invoiceWorkflowStatuses.includes(ticket.status);
+    const statusChoices = state.role === "approver"
+      ? invoiceWorkflowStatuses.filter((status) => status !== "Invoiced")
+      : invoiceWorkflowStatuses;
     const packet = `${(ticket.attachments || []).length + (ticket.driverAttachments || []).length} files / ${ticket.signerName ? "signed" : "unsigned"}`;
     return `
       <tr>
@@ -1032,10 +1042,14 @@ function renderInvoices() {
         <td>${packet}</td>
         <td><strong>${formatAmount(ticket)}</strong></td>
         <td><span class="status-pill ${statusClass(ticket.status)}">${ticket.status}</span></td>
-        <td><button class="small-button invoice-action" data-ticket="${ticket.id}" ${disabled}>Mark invoiced</button></td>
+        <td>
+          <select class="invoice-status-action" data-ticket="${ticket.id}" ${canChangeApproval ? "" : "disabled"}>
+            ${statusChoices.map((status) => `<option value="${status}" ${ticket.status === status ? "selected" : ""}>${status}</option>`).join("")}
+          </select>
+        </td>
       </tr>`;
   }).join("");
-  document.querySelectorAll(".invoice-action").forEach((button) => button.addEventListener("click", () => updateTicket(button.dataset.ticket, "Invoiced")));
+  document.querySelectorAll(".invoice-status-action").forEach((select) => select.addEventListener("change", () => updateTicket(select.dataset.ticket, select.value)));
 }
 
 function renderCustomers() {
@@ -1101,10 +1115,10 @@ function renderMaintenance() {
 function renderReports() {
   const customerTotals = sumBy(state.tickets, (ticket) => customerName(ticket.customerId));
   const equipmentTotals = sumBy(state.tickets, (ticket) => findEquipment(ticket.equipmentId)?.name || "Unassigned");
-  const uninvoiced = state.tickets.filter((ticket) => ticket.status === "Completed").reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
+  const uninvoiced = state.tickets.filter((ticket) => ticket.status === "Final Approved").reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
   document.querySelector("#customerReport").innerHTML = reportBars(customerTotals);
   document.querySelector("#equipmentReport").innerHTML = reportBars(equipmentTotals);
-  document.querySelector("#uninvoicedReport").innerHTML = `<div class="big-number">${moneyFormatter.format(uninvoiced)}</div><p class="muted-small">Completed work waiting on invoicing.</p>`;
+  document.querySelector("#uninvoicedReport").innerHTML = `<div class="big-number">${moneyFormatter.format(uninvoiced)}</div><p class="muted-small">Final approved work waiting on invoicing.</p>`;
 }
 
 function sumBy(tickets, labeler) {
@@ -1139,7 +1153,7 @@ function renderAdmin() {
   document.querySelector("#userList").innerHTML = `${userStatus}${state.users.length ? state.users.map((user) => `
     <div class="user-row">
       <div><strong>${user.name}</strong><span>@${user.username}</span></div>
-      <div><strong>${user.role}</strong><span>Role</span></div>
+      <div><strong>${roleLabel(user.role)}</strong><span>Role</span></div>
       <form class="password-form" data-id="${user.id}">
         <input required minlength="8" type="password" placeholder="New password" />
         <button class="small-button" type="submit">Reset password</button>
@@ -1202,6 +1216,10 @@ function renderAll() {
 }
 
 async function updateTicket(id, status) {
+  if (approvalStatuses.includes(status) && !["admin", "approver", "invoicing"].includes(state.role)) {
+    alert("Only approver, invoicing, or admin users can update invoice approval statuses.");
+    return;
+  }
   if (status === "Invoiced" && !["admin", "invoicing"].includes(state.role)) {
     alert("Only invoicing or admin users can mark a ticket as invoiced.");
     return;
@@ -1215,7 +1233,7 @@ async function updateTicket(id, status) {
       actual_start: actualStart || null,
       actual_end: actualEnd || null,
       completed_at: status === "Completed" ? new Date().toISOString() : currentTicket.completedAt || null,
-      invoiced_at: status === "Invoiced" ? new Date().toISOString() : currentTicket.invoicedAt || null,
+      invoiced_at: ["Invoiced", "Paid"].includes(status) ? new Date().toISOString() : currentTicket.invoicedAt || null,
       canceled_at: status === "Canceled" ? new Date().toISOString() : null,
     };
     const { error } = await supabaseClient.from("work_tickets").update(update).eq("id", currentTicket.dbId);
@@ -1235,11 +1253,11 @@ async function updateTicket(id, status) {
       next.completedAt = new Date().toISOString();
       if (!next.actualEnd) next.actualEnd = actualEnd;
     }
-    if (status === "Invoiced") next.invoicedAt = new Date().toISOString();
+    if (["Invoiced", "Paid"].includes(status)) next.invoicedAt = new Date().toISOString();
     return next;
   });
   const ticket = state.tickets.find((item) => item.id === id);
-  notify(`${id} moved to ${status}.`, status === "Invoiced" ? "invoicing" : "dispatcher");
+  notify(`${id} moved to ${status}.`, invoiceWorkflowStatuses.includes(status) ? "invoicing" : "dispatcher");
   if (ticket) updateEquipmentFromTickets(ticket.equipmentId);
   renderAll();
 }
@@ -1415,9 +1433,9 @@ function downloadText(filename, text, type = "text/plain") {
 
 function exportCsv() {
   const rows = [["Ticket", "Customer", "Date", "Service", "Driver", "Equipment", "Status", "Amount", "Signed", "Files"]];
-  const readyTickets = state.tickets.filter((ticket) => ticket.status === "Completed");
+  const readyTickets = state.tickets.filter((ticket) => ticket.status === "Final Approved");
   if (!readyTickets.length) {
-    alert("There are no completed tickets ready to export for invoicing.");
+    alert("There are no final approved tickets ready to export for invoicing.");
     return;
   }
   readyTickets.forEach((ticket) => rows.push([
@@ -1437,10 +1455,10 @@ function exportCsv() {
 
 function exportPacket() {
   const packet = state.tickets
-    .filter((ticket) => ticket.status === "Completed")
+    .filter((ticket) => ticket.status === "Final Approved")
     .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
     .join("\n\n---\n\n");
-  downloadText("prz-invoice-packet.txt", packet || "No completed tickets ready for invoicing.");
+  downloadText("prz-invoice-packet.txt", packet || "No final approved tickets ready for invoicing.");
 }
 
 function seedSampleDay() {
