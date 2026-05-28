@@ -1146,8 +1146,7 @@ function renderAdmin() {
       <div>
         <strong>${driver.name}</strong>
         <span>${driver.phone}</span>
-        <span>Types: ${driver.equipmentTypes?.length ? driver.equipmentTypes.join(", ") : "All equipment types"}</span>
-        <span>Units: ${driver.assignedEquipmentIds?.length ? driver.assignedEquipmentIds.map((id) => findEquipment(id)?.name || id).join(", ") : "Any matching unit"}</span>
+        <span>Units: ${driver.assignedEquipmentIds?.length ? driver.assignedEquipmentIds.map((id) => findEquipment(id)?.name || id).join(", ") : "No units assigned"}</span>
       </div>
       <form class="driver-assignment-form" data-id="${driver.id}">
         <div class="unit-builder-row">
@@ -1155,20 +1154,20 @@ function renderAdmin() {
           <select class="existing-driver-unit-type">${equipmentTypeOptions()}</select>
           <button class="small-button add-existing-driver-unit" type="button">Add unit</button>
         </div>
-        <select class="driver-type-assignment" multiple aria-label="Equipment types for ${driver.name}">
-          ${state.equipmentTypes.map((type) => `<option value="${type}" ${driver.equipmentTypes?.includes(type) ? "selected" : ""}>${type}</option>`).join("")}
-        </select>
-        <select class="driver-unit-assignment" multiple aria-label="Assigned units for ${driver.name}">
-          ${state.equipment.map((item) => `<option value="${item.id}" ${driver.assignedEquipmentIds?.includes(item.id) ? "selected" : ""}>${item.name} (${item.type})</option>`).join("")}
-        </select>
-        <button class="small-button" type="submit">Update assignments</button>
+        <div class="unit-list assigned-unit-list">
+          ${driver.assignedEquipmentIds?.length
+    ? driver.assignedEquipmentIds.map((id) => {
+      const unit = findEquipment(id);
+      return `<div class="unit-chip"><strong>${unit?.name || id}</strong><span>${unit?.type || "Assigned unit"}</span></div>`;
+    }).join("")
+    : `<div class="empty-state">No units assigned yet.</div>`}
+        </div>
       </form>
       <button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button>
     </div>`).join("");
   document.querySelector("#equipmentList").innerHTML = state.equipmentTypes.map((type) => `
     <div class="admin-row"><div><strong>${type}</strong><span>Equipment type</span></div><button class="small-button remove-equipment-type" data-type="${type}" type="button">Remove</button></div>`).join("");
   document.querySelectorAll(".remove-driver").forEach((button) => button.addEventListener("click", () => removeDriver(button.dataset.id)));
-  document.querySelectorAll(".driver-assignment-form").forEach((form) => form.addEventListener("submit", updateDriverAssignments));
   document.querySelectorAll(".add-existing-driver-unit").forEach((button) => button.addEventListener("click", addUnitToExistingDriver));
   document.querySelectorAll(".remove-equipment-type").forEach((button) => button.addEventListener("click", () => removeEquipmentType(button.dataset.type)));
   document.querySelectorAll(".remove-user").forEach((button) => button.addEventListener("click", () => removeUser(button.dataset.id)));

@@ -813,8 +813,12 @@ button:focus-visible {
   width: 100%;
 }
 
-.driver-assignment-form select {
-  min-height: 120px;
+.driver-assignment-form .unit-builder-row select {
+  min-height: 40px;
+}
+
+.assigned-unit-list {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
 .user-form {
