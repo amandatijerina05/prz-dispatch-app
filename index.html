@@ -280,12 +280,21 @@
             </section>
             <section class="panel">
               <div class="panel-heading"><div><p class="eyebrow">Admin dashboard</p><h2>Drivers</h2></div></div>
-              <form class="inline-form" id="driverForm"><input id="driverName" required placeholder="Driver name" /><input id="driverPhone" required placeholder="Phone" /><select id="driverUser"><option value="">No login user</option></select><button class="primary-button" type="submit">Add driver</button></form>
+              <form class="inline-form driver-admin-form" id="driverForm">
+                <input id="driverName" required placeholder="Driver name" />
+                <input id="driverPhone" required placeholder="Phone" />
+                <select id="driverUser"><option value="">No login user</option></select>
+                <fieldset class="check-grid">
+                  <legend>Equipment types</legend>
+                  <div id="driverEquipmentTypes"></div>
+                </fieldset>
+                <button class="primary-button" type="submit">Add driver</button>
+              </form>
               <div class="admin-list" id="driverList"></div>
             </section>
             <section class="panel">
               <div class="panel-heading"><div><p class="eyebrow">Fleet and crane assets</p><h2>Equipment</h2></div></div>
-              <form class="inline-form" id="equipmentForm"><input id="equipmentName" required placeholder="Unit name" /><select id="equipmentType"><option>Crane</option><option>Truck</option><option>Trailer</option><option>Support</option></select><button class="primary-button" type="submit">Add equipment</button></form>
+              <form class="inline-form" id="equipmentForm"><input id="equipmentName" required placeholder="Unit name" /><select id="equipmentType"></select><button class="primary-button" type="submit">Add equipment</button></form>
               <div class="admin-list" id="equipmentList"></div>
             </section>
           </div>

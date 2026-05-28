@@ -57,6 +57,7 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 - `supabase-seed.sql` adds starter PRZ drivers, equipment, customers, and maintenance records.
 - `supabase-storage-policies.sql` enables ticket attachment, driver photo, and signature uploads.
 - `supabase-clean-duplicate-attachments.sql` removes duplicate attachment records from earlier testing.
+- `supabase-equipment-driver-types.sql` adds driver equipment-type assignments and PRZ equipment models.
 
 ## Production Environment Variables
 

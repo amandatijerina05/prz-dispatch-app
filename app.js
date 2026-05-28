@@ -1,5 +1,6 @@
 const STORAGE_KEY = "prz-dispatch-app-v2";
 const INACTIVITY_TIMEOUT_MINUTES = 30;
+const EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
 
 const permissions = {
   admin: ["dispatch", "drivers", "invoicing", "customers", "operations", "maintenance", "reports", "notifications", "admin"],
@@ -91,6 +92,10 @@ function normalizeState(data) {
   data.maintenance ||= [];
   data.notifications ||= [];
   data.role ||= "admin";
+  data.drivers = (data.drivers || []).map((driver) => ({
+    equipmentTypes: [],
+    ...driver,
+  }));
   data.equipment = (data.equipment || []).map((item) => ({
     status: "Available",
     cert: "2026-12-31",
@@ -128,6 +133,16 @@ function mapCustomer(row) {
     terms: row.billing_terms,
     site: row.default_site,
     instructions: row.instructions,
+  };
+}
+
+function mapDriver(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    phone: row.phone,
+    equipmentTypes: row.equipment_types || [],
   };
 }
 
@@ -404,7 +419,7 @@ async function loadSupabaseReferenceData() {
   }
 
   state.customers = customersResult.data.map(mapCustomer);
-  state.drivers = driversResult.data;
+  state.drivers = driversResult.data.map(mapDriver);
   state.equipment = equipmentResult.data.map(mapEquipment);
   state.maintenance = maintenanceResult.data.map(mapMaintenance);
   state.tickets = ticketsResult.data.map(mapTicket);
@@ -554,6 +569,35 @@ function findEquipment(id) {
   return state.equipment.find((equipment) => equipment.id === id);
 }
 
+function equipmentTypeOptions() {
+  return EQUIPMENT_TYPES.map((type) => `<option value="${type}">${type}</option>`).join("");
+}
+
+function driverEquipmentTypeOptions() {
+  return EQUIPMENT_TYPES.map((type) => `<label class="check-option"><input type="checkbox" name="driverEquipmentTypes" value="${type}" />${type}</label>`).join("");
+}
+
+function selectedDriverEquipmentTypes() {
+  return [...document.querySelectorAll("input[name='driverEquipmentTypes']:checked")].map((input) => input.value);
+}
+
+function equipmentForDriver(driverId) {
+  const driver = findDriver(driverId);
+  const allowedTypes = driver?.equipmentTypes || [];
+  const available = state.equipment.filter((item) => item.status !== "Out of Service");
+  if (!allowedTypes.length) return available;
+  return available.filter((item) => allowedTypes.includes(item.type));
+}
+
+function renderEquipmentOptionsForDriver() {
+  const equipmentSelect = document.querySelector("#equipment");
+  const driverId = document.querySelector("#driver").value;
+  const currentEquipmentId = equipmentSelect.value;
+  const options = equipmentForDriver(driverId).map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
+  equipmentSelect.innerHTML = options || `<option value="">No matching equipment for driver</option>`;
+  if (equipmentForDriver(driverId).some((item) => item.id === currentEquipmentId)) equipmentSelect.value = currentEquipmentId;
+}
+
 function ticketTotal(ticket) {
   const base = Number(ticket.hours || 0) * Number(ticket.rate || 0);
   const overtime = Number(ticket.overtimeHours || 0) * Number(ticket.rate || 0) * 1.5;
@@ -642,8 +686,6 @@ function renderSelects() {
   const activeDriverId = document.querySelector("#driverQueueSelect").value;
   const activeSignatureTicket = document.querySelector("#signatureTicketSelect").value;
   const driverOptions = state.drivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
-  const availableEquipment = state.equipment.filter((item) => item.status !== "Out of Service");
-  const equipmentOptions = availableEquipment.map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
   const driverUserOptions = `<option value="">No login user</option>${state.users.filter((user) => user.role === "driver").map((user) => `<option value="${user.id}">${user.name} (${user.username})</option>`).join("")}`;
@@ -654,11 +696,13 @@ function renderSelects() {
 
   document.querySelector("#driver").innerHTML = driverOptions;
   document.querySelector("#driverQueueSelect").innerHTML = driverOptions;
-  document.querySelector("#equipment").innerHTML = equipmentOptions;
+  document.querySelector("#equipmentType").innerHTML = equipmentTypeOptions();
+  document.querySelector("#driverEquipmentTypes").innerHTML = driverEquipmentTypeOptions();
   document.querySelector("#customerSelect").innerHTML = customerOptions;
   document.querySelector("#maintenanceEquipment").innerHTML = maintenanceOptions;
   document.querySelector("#driverUser").innerHTML = driverUserOptions;
   document.querySelector("#signatureTicketSelect").innerHTML = activeTicketOptions || `<option value="">No open tickets</option>`;
+  renderEquipmentOptionsForDriver();
 
   if (state.drivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
   if (state.tickets.some((ticket) => ticket.id === activeSignatureTicket)) document.querySelector("#signatureTicketSelect").value = activeSignatureTicket;
@@ -912,7 +956,7 @@ function renderAdmin() {
       <button class="small-button remove-user" data-id="${user.id}" type="button">Remove</button>
     </div>`).join("");
   document.querySelector("#driverList").innerHTML = state.drivers.map((driver) => `
-    <div class="admin-row"><div><strong>${driver.name}</strong><span>${driver.phone}</span></div><button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button></div>`).join("");
+    <div class="admin-row"><div><strong>${driver.name}</strong><span>${driver.phone}</span><span>${driver.equipmentTypes?.length ? driver.equipmentTypes.join(", ") : "All equipment types"}</span></div><button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button></div>`).join("");
   document.querySelector("#equipmentList").innerHTML = state.equipment.map((item) => `
     <div class="admin-row"><div><strong>${item.name}</strong><span>${item.type} | ${item.status}</span></div><button class="small-button remove-equipment" data-id="${item.id}" type="button">Remove</button></div>`).join("");
   document.querySelectorAll(".remove-driver").forEach((button) => button.addEventListener("click", () => removeDriver(button.dataset.id)));
@@ -1217,6 +1261,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
     name: document.querySelector("#driverName").value.trim(),
     phone: document.querySelector("#driverPhone").value.trim(),
     user_id: document.querySelector("#driverUser").value || null,
+    equipment_types: selectedDriverEquipmentTypes(),
   };
   if (supabaseSession) {
     supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
@@ -1226,7 +1271,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
     });
     return;
   }
-  state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id });
+  state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id, equipmentTypes: driver.equipment_types });
   event.currentTarget.reset();
   renderAll();
 });
@@ -1418,6 +1463,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
 document.querySelectorAll(".nav-tab").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 document.querySelector("#statusFilter").addEventListener("change", renderTickets);
 document.querySelector("#driverQueueSelect").addEventListener("change", renderDriverQueue);
+document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
   state.role = event.target.value;
   renderAll();

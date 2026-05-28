@@ -709,6 +709,45 @@ button:focus-visible {
   margin: 14px 0 16px;
 }
 
+.driver-admin-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.check-grid {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.check-grid legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.check-grid div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.check-option input {
+  width: auto;
+}
+
 .user-form {
   display: grid;
   grid-template-columns: 1.15fr 1fr 0.9fr 1fr auto;
