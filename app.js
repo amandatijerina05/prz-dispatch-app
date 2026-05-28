@@ -1017,7 +1017,7 @@ function renderNotifications() {
 }
 
 function renderAdmin() {
-  document.querySelector("#userList").innerHTML = state.users.map((user) => `
+  document.querySelector("#userList").innerHTML = state.users.length ? state.users.map((user) => `
     <div class="user-row">
       <div><strong>${user.name}</strong><span>@${user.username}</span></div>
       <div><strong>${user.role}</strong><span>Role</span></div>
@@ -1026,7 +1026,7 @@ function renderAdmin() {
         <button class="small-button" type="submit">Reset password</button>
       </form>
       <button class="small-button remove-user" data-id="${user.id}" type="button">Remove</button>
-    </div>`).join("");
+    </div>`).join("") : `<div class="empty-state">No users loaded yet. Hard refresh or sign out and back in.</div>`;
   document.querySelector("#driverList").innerHTML = state.drivers.map((driver) => `
     <div class="admin-row driver-row">
       <div>
@@ -1268,14 +1268,17 @@ function resetPassword(id, password) {
 
 async function adminUserRequest(method, body) {
   if (!supabaseSession?.access_token) return { error: "Sign in as an admin first." };
-  const response = await fetch("/api/admin-users", {
+  const options = {
     method,
     headers: {
       authorization: `Bearer ${supabaseSession.access_token}`,
-      "content-type": "application/json",
     },
-    body: JSON.stringify(body),
-  });
+  };
+  if (method !== "GET") {
+    options.headers["content-type"] = "application/json";
+    options.body = JSON.stringify(body || {});
+  }
+  const response = await fetch("/api/admin-users", options);
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return { error: result.error || "User management request failed." };
   return result;
