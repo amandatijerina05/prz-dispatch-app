@@ -1029,9 +1029,10 @@ function renderInvoices() {
   }
   rows.innerHTML = tickets.map((ticket) => {
     const canChangeApproval = ["admin", "approver", "invoicing"].includes(state.role) && invoiceWorkflowStatuses.includes(ticket.status);
-    const statusChoices = state.role === "approver"
+    const baseStatusChoices = state.role === "approver"
       ? invoiceWorkflowStatuses.filter((status) => status !== "Invoiced")
       : invoiceWorkflowStatuses;
+    const statusChoices = canCancelTicket(ticket) ? [...baseStatusChoices, "Canceled"] : baseStatusChoices;
     const packet = `${(ticket.attachments || []).length + (ticket.driverAttachments || []).length} files / ${ticket.signerName ? "signed" : "unsigned"}`;
     return `
       <tr>
@@ -1216,6 +1217,11 @@ function renderAll() {
 }
 
 async function updateTicket(id, status) {
+  const currentTicket = state.tickets.find((ticket) => ticket.id === id);
+  if (status === "Canceled" && !canCancelTicket(currentTicket)) {
+    alert("Only office users can cancel a work ticket before it is invoiced.");
+    return;
+  }
   if (approvalStatuses.includes(status) && !["admin", "approver", "invoicing"].includes(state.role)) {
     alert("Only approver, invoicing, or admin users can update invoice approval statuses.");
     return;
@@ -1224,7 +1230,6 @@ async function updateTicket(id, status) {
     alert("Only invoicing or admin users can mark a ticket as invoiced.");
     return;
   }
-  const currentTicket = state.tickets.find((ticket) => ticket.id === id);
   const actualStart = status === "In Progress" && !currentTicket?.actualStart ? new Date().toTimeString().slice(0, 5) : currentTicket?.actualStart;
   const actualEnd = status === "Completed" && !currentTicket?.actualEnd ? new Date().toTimeString().slice(0, 5) : currentTicket?.actualEnd;
   if (supabaseSession && currentTicket?.dbId) {
@@ -1254,10 +1259,11 @@ async function updateTicket(id, status) {
       if (!next.actualEnd) next.actualEnd = actualEnd;
     }
     if (["Invoiced", "Paid"].includes(status)) next.invoicedAt = new Date().toISOString();
+    if (status === "Canceled") next.canceledAt = new Date().toISOString();
     return next;
   });
   const ticket = state.tickets.find((item) => item.id === id);
-  notify(`${id} moved to ${status}.`, invoiceWorkflowStatuses.includes(status) ? "invoicing" : "dispatcher");
+  notify(`${id} moved to ${status}.`, invoiceWorkflowStatuses.includes(status) || status === "Canceled" ? "invoicing" : "dispatcher");
   if (ticket) updateEquipmentFromTickets(ticket.equipmentId);
   renderAll();
 }
