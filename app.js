@@ -550,6 +550,8 @@ async function applySupabaseSession(session) {
   supabaseProfile = data;
   state.role = data.role;
   setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
+  document.querySelector("#activeRoleLabel").textContent = roleLabel(data.role);
+  document.querySelector("#roleSelect").value = data.role;
   document.querySelector("#authForm").reset();
   setAuthFormLoading(false);
   resetInactivityTimer();
@@ -806,17 +808,19 @@ function setView(name) {
 
 function applyRole() {
   lockRoleToProfile();
-  const allowed = permissions[state.role];
+  const effectiveRole = supabaseProfile?.role || state.role;
+  state.role = effectiveRole;
+  const allowed = permissions[effectiveRole];
   document.querySelectorAll(".nav-tab").forEach((button) => {
     const canView = allowed.includes(button.dataset.view);
     button.hidden = !canView;
     button.classList.toggle("is-role-hidden", !canView);
     button.setAttribute("aria-hidden", String(!canView));
   });
-  document.querySelector("#roleSelect").value = state.role;
-  document.querySelector("#activeRoleLabel").textContent = roleLabel(state.role);
-  document.body.classList.toggle("driver-mode", state.role === "driver");
-  document.body.classList.toggle("maintenance-mode", state.role === "maintenance");
+  document.querySelector("#roleSelect").value = effectiveRole;
+  document.querySelector("#activeRoleLabel").textContent = roleLabel(effectiveRole);
+  document.body.classList.toggle("driver-mode", effectiveRole === "driver");
+  document.body.classList.toggle("maintenance-mode", effectiveRole === "maintenance");
   const active = document.querySelector(".nav-tab.active")?.dataset.view;
   setView(active && allowed.includes(active) ? active : allowed[0]);
 }
