@@ -748,6 +748,22 @@ button:focus-visible {
   width: auto;
 }
 
+.driver-row {
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.driver-assignment-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.driver-assignment-form select {
+  min-height: 120px;
+}
+
 .user-form {
   display: grid;
   grid-template-columns: 1.15fr 1fr 0.9fr 1fr auto;

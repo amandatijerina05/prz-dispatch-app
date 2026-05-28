@@ -17,6 +17,7 @@ create table if not exists drivers (
   name text not null,
   phone text not null,
   equipment_types text[] not null default '{}',
+  assigned_equipment_ids uuid[] not null default '{}',
   active boolean not null default true,
   created_at timestamptz not null default now()
 );

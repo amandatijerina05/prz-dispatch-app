@@ -94,6 +94,7 @@ function normalizeState(data) {
   data.role ||= "admin";
   data.drivers = (data.drivers || []).map((driver) => ({
     equipmentTypes: [],
+    assignedEquipmentIds: [],
     ...driver,
   }));
   data.equipment = (data.equipment || []).map((item) => ({
@@ -143,6 +144,7 @@ function mapDriver(row) {
     name: row.name,
     phone: row.phone,
     equipmentTypes: row.equipment_types || [],
+    assignedEquipmentIds: row.assigned_equipment_ids || [],
   };
 }
 
@@ -577,14 +579,24 @@ function driverEquipmentTypeOptions() {
   return EQUIPMENT_TYPES.map((type) => `<label class="check-option"><input type="checkbox" name="driverEquipmentTypes" value="${type}" />${type}</label>`).join("");
 }
 
+function driverEquipmentUnitOptions(name = "driverEquipmentUnits", selectedIds = []) {
+  return state.equipment.map((item) => `<label class="check-option"><input type="checkbox" name="${name}" value="${item.id}" ${selectedIds.includes(item.id) ? "checked" : ""} />${item.name} (${item.type})</label>`).join("") || `<span class="muted-small">Add equipment units first.</span>`;
+}
+
 function selectedDriverEquipmentTypes() {
   return [...document.querySelectorAll("input[name='driverEquipmentTypes']:checked")].map((input) => input.value);
 }
 
+function selectedDriverEquipmentUnits(name = "driverEquipmentUnits") {
+  return [...document.querySelectorAll(`input[name='${name}']:checked`)].map((input) => input.value);
+}
+
 function equipmentForDriver(driverId) {
   const driver = findDriver(driverId);
+  const assignedEquipmentIds = driver?.assignedEquipmentIds || [];
   const allowedTypes = driver?.equipmentTypes || [];
   const available = state.equipment.filter((item) => item.status !== "Out of Service");
+  if (assignedEquipmentIds.length) return available.filter((item) => assignedEquipmentIds.includes(item.id));
   if (!allowedTypes.length) return available;
   return available.filter((item) => allowedTypes.includes(item.type));
 }
@@ -698,6 +710,7 @@ function renderSelects() {
   document.querySelector("#driverQueueSelect").innerHTML = driverOptions;
   document.querySelector("#equipmentType").innerHTML = equipmentTypeOptions();
   document.querySelector("#driverEquipmentTypes").innerHTML = driverEquipmentTypeOptions();
+  document.querySelector("#driverEquipmentUnits").innerHTML = driverEquipmentUnitOptions();
   document.querySelector("#customerSelect").innerHTML = customerOptions;
   document.querySelector("#maintenanceEquipment").innerHTML = maintenanceOptions;
   document.querySelector("#driverUser").innerHTML = driverUserOptions;
@@ -956,10 +969,28 @@ function renderAdmin() {
       <button class="small-button remove-user" data-id="${user.id}" type="button">Remove</button>
     </div>`).join("");
   document.querySelector("#driverList").innerHTML = state.drivers.map((driver) => `
-    <div class="admin-row"><div><strong>${driver.name}</strong><span>${driver.phone}</span><span>${driver.equipmentTypes?.length ? driver.equipmentTypes.join(", ") : "All equipment types"}</span></div><button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button></div>`).join("");
+    <div class="admin-row driver-row">
+      <div>
+        <strong>${driver.name}</strong>
+        <span>${driver.phone}</span>
+        <span>Types: ${driver.equipmentTypes?.length ? driver.equipmentTypes.join(", ") : "All equipment types"}</span>
+        <span>Units: ${driver.assignedEquipmentIds?.length ? driver.assignedEquipmentIds.map((id) => findEquipment(id)?.name || id).join(", ") : "Any matching unit"}</span>
+      </div>
+      <form class="driver-assignment-form" data-id="${driver.id}">
+        <select class="driver-type-assignment" multiple aria-label="Equipment types for ${driver.name}">
+          ${EQUIPMENT_TYPES.map((type) => `<option value="${type}" ${driver.equipmentTypes?.includes(type) ? "selected" : ""}>${type}</option>`).join("")}
+        </select>
+        <select class="driver-unit-assignment" multiple aria-label="Assigned units for ${driver.name}">
+          ${state.equipment.map((item) => `<option value="${item.id}" ${driver.assignedEquipmentIds?.includes(item.id) ? "selected" : ""}>${item.name} (${item.type})</option>`).join("")}
+        </select>
+        <button class="small-button" type="submit">Update assignments</button>
+      </form>
+      <button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button>
+    </div>`).join("");
   document.querySelector("#equipmentList").innerHTML = state.equipment.map((item) => `
     <div class="admin-row"><div><strong>${item.name}</strong><span>${item.type} | ${item.status}</span></div><button class="small-button remove-equipment" data-id="${item.id}" type="button">Remove</button></div>`).join("");
   document.querySelectorAll(".remove-driver").forEach((button) => button.addEventListener("click", () => removeDriver(button.dataset.id)));
+  document.querySelectorAll(".driver-assignment-form").forEach((form) => form.addEventListener("submit", updateDriverAssignments));
   document.querySelectorAll(".remove-equipment").forEach((button) => button.addEventListener("click", () => removeEquipment(button.dataset.id)));
   document.querySelectorAll(".remove-user").forEach((button) => button.addEventListener("click", () => removeUser(button.dataset.id)));
   document.querySelectorAll(".password-form").forEach((form) => form.addEventListener("submit", (event) => {
@@ -1048,6 +1079,27 @@ function updateEquipmentFromTickets(equipmentId) {
 function removeDriver(id) {
   if (state.tickets.some((ticket) => ticket.driverId === id && !["Invoiced", "Canceled"].includes(ticket.status))) return alert("This driver has open tickets.");
   state.drivers = state.drivers.filter((driver) => driver.id !== id);
+  renderAll();
+}
+
+function selectedOptions(select) {
+  return [...select.selectedOptions].map((option) => option.value);
+}
+
+function updateDriverAssignments(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = form.dataset.id;
+  const equipment_types = selectedOptions(form.querySelector(".driver-type-assignment"));
+  const assigned_equipment_ids = selectedOptions(form.querySelector(".driver-unit-assignment"));
+  if (supabaseSession) {
+    supabaseClient.from("drivers").update({ equipment_types, assigned_equipment_ids }).eq("id", id).then(async ({ error }) => {
+      if (error) return alert(error.message);
+      await loadSupabaseReferenceData();
+    });
+    return;
+  }
+  state.drivers = state.drivers.map((driver) => driver.id === id ? { ...driver, equipmentTypes: equipment_types, assignedEquipmentIds: assigned_equipment_ids } : driver);
   renderAll();
 }
 
@@ -1262,6 +1314,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
     phone: document.querySelector("#driverPhone").value.trim(),
     user_id: document.querySelector("#driverUser").value || null,
     equipment_types: selectedDriverEquipmentTypes(),
+    assigned_equipment_ids: selectedDriverEquipmentUnits(),
   };
   if (supabaseSession) {
     supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
@@ -1271,7 +1324,7 @@ document.querySelector("#driverForm").addEventListener("submit", (event) => {
     });
     return;
   }
-  state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id, equipmentTypes: driver.equipment_types });
+  state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id, equipmentTypes: driver.equipment_types, assignedEquipmentIds: driver.assigned_equipment_ids });
   event.currentTarget.reset();
   renderAll();
 });

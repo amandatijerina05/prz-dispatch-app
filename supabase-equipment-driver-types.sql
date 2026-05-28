@@ -4,6 +4,9 @@
 alter table drivers
 add column if not exists equipment_types text[] not null default '{}';
 
+alter table drivers
+add column if not exists assigned_equipment_ids uuid[] not null default '{}';
+
 alter table equipment
 drop constraint if exists equipment_type_check;
 
