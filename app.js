@@ -75,6 +75,8 @@ let completionSaveInProgress = false;
 let inactivityTimer = null;
 let pendingDriverUnits = [];
 let authLoadId = 0;
+let adminUsersLoading = false;
+let adminUsersLoadStatus = "";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -412,6 +414,25 @@ async function loadAdminUsers() {
   const result = await adminUserRequest("GET");
   if (result.error) throw new Error(result.error);
   return (result.users || []).map(mapUser);
+}
+
+async function refreshAdminUsers() {
+  if (state.role !== "admin" || !supabaseSession?.access_token || adminUsersLoading) return;
+  adminUsersLoading = true;
+  adminUsersLoadStatus = "Loading users...";
+  renderAdmin();
+
+  try {
+    state.users = await loadAdminUsers();
+    adminUsersLoadStatus = `Loaded ${state.users.length} active ${state.users.length === 1 ? "user" : "users"}.`;
+    saveState();
+    renderSelects();
+  } catch (error) {
+    adminUsersLoadStatus = `Could not load users: ${error.message}`;
+  } finally {
+    adminUsersLoading = false;
+    renderAdmin();
+  }
 }
 
 async function loadSupabaseReferenceData() {
@@ -756,6 +777,7 @@ function setView(name) {
     button.classList.toggle("active", button.dataset.view === safeName);
   });
   document.querySelector("#viewTitle").textContent = viewTitles[safeName];
+  if (safeName === "admin") refreshAdminUsers();
 }
 
 function applyRole() {
@@ -1043,7 +1065,8 @@ function renderNotifications() {
 }
 
 function renderAdmin() {
-  document.querySelector("#userList").innerHTML = state.users.length ? state.users.map((user) => `
+  const userStatus = adminUsersLoadStatus ? `<div class="empty-state">${adminUsersLoadStatus}</div>` : "";
+  document.querySelector("#userList").innerHTML = `${userStatus}${state.users.length ? state.users.map((user) => `
     <div class="user-row">
       <div><strong>${user.name}</strong><span>@${user.username}</span></div>
       <div><strong>${user.role}</strong><span>Role</span></div>
@@ -1052,7 +1075,7 @@ function renderAdmin() {
         <button class="small-button" type="submit">Reset password</button>
       </form>
       <button class="small-button remove-user" data-id="${user.id}" type="button">Remove</button>
-    </div>`).join("") : `<div class="empty-state">No users loaded yet. Hard refresh or sign out and back in.</div>`;
+    </div>`).join("") : `<div class="empty-state">No users loaded yet. Click Refresh users, or sign out and back in.</div>`}`;
   document.querySelector("#driverList").innerHTML = state.drivers.map((driver) => `
     <div class="admin-row driver-row">
       <div>
@@ -1686,6 +1709,7 @@ document.querySelector("#authForm").addEventListener("submit", async (event) => 
   await signInWithSupabase(document.querySelector("#authEmail").value.trim(), document.querySelector("#authPassword").value);
 });
 document.querySelector("#signOutButton").addEventListener("click", signOutOfSupabase);
+document.querySelector("#refreshUsers").addEventListener("click", refreshAdminUsers);
 
 const canvas = document.querySelector("#signatureCanvas");
 const ctx = canvas.getContext("2d");

@@ -262,7 +262,10 @@
         <section class="view" id="adminView">
           <div class="admin-grid">
             <section class="panel admin-wide">
-              <div class="panel-heading"><div><p class="eyebrow">User access</p><h2>Users and passwords</h2></div></div>
+              <div class="panel-heading">
+                <div><p class="eyebrow">User access</p><h2>Users and passwords</h2></div>
+                <button class="small-button" id="refreshUsers" type="button">Refresh users</button>
+              </div>
               <form class="user-form" id="userForm">
                 <input id="userName" required placeholder="Full name" />
                 <input id="userUsername" required type="email" placeholder="Email address" />
