@@ -692,7 +692,9 @@ function equipmentForDriver(driverId) {
 
 function renderEquipmentOptionsForDriver() {
   const equipmentSelect = document.querySelector("#equipment");
-  const driverId = document.querySelector("#driver").value;
+  const driverSelect = document.querySelector("#driver");
+  if (!equipmentSelect || !driverSelect) return;
+  const driverId = driverSelect.value;
   const currentEquipmentId = equipmentSelect.value;
   const options = equipmentForDriver(driverId).map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
   equipmentSelect.innerHTML = options || `<option value="">No matching equipment for driver</option>`;
@@ -846,8 +848,16 @@ function applyRole() {
 
 function renderSelects() {
   lockRoleToProfile();
-  const activeDriverId = document.querySelector("#driverQueueSelect").value;
-  const activeSignatureTicket = document.querySelector("#signatureTicketSelect").value;
+  const driverQueueSelect = document.querySelector("#driverQueueSelect");
+  const signatureTicketSelect = document.querySelector("#signatureTicketSelect");
+  const driverSelect = document.querySelector("#driver");
+  const equipmentTypeSelect = document.querySelector("#equipmentType");
+  const driverUnitTypeSelect = document.querySelector("#driverUnitType");
+  const customerSelect = document.querySelector("#customerSelect");
+  const maintenanceEquipmentSelect = document.querySelector("#maintenanceEquipment");
+  const driverUserSelect = document.querySelector("#driverUser");
+  const activeDriverId = driverQueueSelect?.value || "";
+  const activeSignatureTicket = signatureTicketSelect?.value || "";
   const driver = currentDriver();
   const visibleDrivers = state.role === "driver" ? (driver ? [driver] : []) : state.drivers;
   const driverOptions = visibleDrivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
@@ -861,20 +871,20 @@ function renderSelects() {
     .map((ticket) => `<option value="${ticket.id}">${ticket.id} - ${customerName(ticket.customerId)}</option>`)
     .join("");
 
-  document.querySelector("#driver").innerHTML = driverOptions;
-  document.querySelector("#driverQueueSelect").innerHTML = driverOptions || `<option value="">No linked driver profile</option>`;
-  document.querySelector("#equipmentType").innerHTML = equipmentTypeOptions();
-  document.querySelector("#driverUnitType").innerHTML = equipmentTypeOptions();
-  document.querySelector("#customerSelect").innerHTML = customerOptions;
-  document.querySelector("#maintenanceEquipment").innerHTML = maintenanceOptions;
-  document.querySelector("#driverUser").innerHTML = driverUserOptions;
-  document.querySelector("#signatureTicketSelect").innerHTML = activeTicketOptions || `<option value="">No open tickets</option>`;
+  if (driverSelect) driverSelect.innerHTML = driverOptions;
+  if (driverQueueSelect) driverQueueSelect.innerHTML = driverOptions || `<option value="">No linked driver profile</option>`;
+  if (equipmentTypeSelect) equipmentTypeSelect.innerHTML = equipmentTypeOptions();
+  if (driverUnitTypeSelect) driverUnitTypeSelect.innerHTML = equipmentTypeOptions();
+  if (customerSelect) customerSelect.innerHTML = customerOptions;
+  if (maintenanceEquipmentSelect) maintenanceEquipmentSelect.innerHTML = maintenanceOptions;
+  if (driverUserSelect) driverUserSelect.innerHTML = driverUserOptions;
+  if (signatureTicketSelect) signatureTicketSelect.innerHTML = activeTicketOptions || `<option value="">No open tickets</option>`;
   renderPendingDriverUnits();
   renderEquipmentOptionsForDriver();
 
-  if (visibleDrivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
-  if (state.role === "driver" && currentDriver()) document.querySelector("#driverQueueSelect").value = currentDriver().id;
-  if (state.tickets.some((ticket) => ticket.id === activeSignatureTicket)) document.querySelector("#signatureTicketSelect").value = activeSignatureTicket;
+  if (driverQueueSelect && visibleDrivers.some((driver) => driver.id === activeDriverId)) driverQueueSelect.value = activeDriverId;
+  if (driverQueueSelect && state.role === "driver" && currentDriver()) driverQueueSelect.value = currentDriver().id;
+  if (signatureTicketSelect && state.tickets.some((ticket) => ticket.id === activeSignatureTicket)) signatureTicketSelect.value = activeSignatureTicket;
 }
 
 function renderStats() {
