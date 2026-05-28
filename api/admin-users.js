@@ -133,13 +133,35 @@ async function deactivateAppUser(appUserId) {
   if (!response.ok) throw new Error(result.message || "Could not remove app user.");
 }
 
+async function listAppUsers() {
+  const { supabaseUrl, serviceRoleKey } = env();
+  const response = await fetch(`${supabaseUrl}/rest/v1/app_users?active=eq.true&select=*&order=full_name.asc`, {
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+    },
+  });
+  const result = await response.json().catch(() => []);
+  if (!response.ok) throw new Error(result.message || "Could not load app users.");
+  return result;
+}
+
 module.exports = async function handler(request, response) {
-  if (!["POST", "PATCH", "DELETE"].includes(request.method)) {
+  if (!["GET", "POST", "PATCH", "DELETE"].includes(request.method)) {
     sendJson(response, 405, { error: "Method not allowed." });
     return;
   }
 
   if (!(await requireAdmin(request, response))) return;
+
+  if (request.method === "GET") {
+    try {
+      sendJson(response, 200, { users: await listAppUsers() });
+    } catch (error) {
+      sendJson(response, 400, { error: error.message });
+    }
+    return;
+  }
 
   let payload = request.body || {};
   if (typeof payload === "string") {

@@ -406,18 +406,25 @@ async function sendWorkTicketSms(ticket) {
   return { sent: true, messageId: result.messageId || "" };
 }
 
+async function loadAdminUsers() {
+  if (state.role !== "admin" || !supabaseSession?.access_token) return [];
+  const result = await adminUserRequest("GET");
+  if (result.error) throw new Error(result.error);
+  return (result.users || []).map(mapUser);
+}
+
 async function loadSupabaseReferenceData() {
   if (!supabaseClient || !supabaseSession) return;
-  const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, usersResult] = await Promise.all([
+  const [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, adminUsers] = await Promise.all([
     supabaseClient.from("customers").select("*").eq("active", true).order("name"),
     supabaseClient.from("drivers").select("*").eq("active", true).order("name"),
     supabaseClient.from("equipment").select("*").order("name"),
     supabaseClient.from("maintenance_records").select("*").order("due_date"),
     supabaseClient.from("work_tickets").select("*, ticket_attachments(*)").order("created_at", { ascending: false }),
-    supabaseClient.from("app_users").select("*").eq("active", true).order("full_name"),
+    loadAdminUsers().catch((error) => ({ error })),
   ]);
 
-  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, usersResult].find((result) => result.error)?.error;
+  const firstError = [customersResult, driversResult, equipmentResult, maintenanceResult, ticketsResult, adminUsers].find((result) => result.error)?.error;
   if (firstError) {
     alert(`Supabase data load failed: ${firstError.message}`);
     return;
@@ -428,7 +435,7 @@ async function loadSupabaseReferenceData() {
   state.equipment = equipmentResult.data.map(mapEquipment);
   state.maintenance = maintenanceResult.data.map(mapMaintenance);
   state.tickets = ticketsResult.data.map(mapTicket);
-  state.users = usersResult.data.map(mapUser);
+  if (state.role === "admin") state.users = adminUsers;
   state.nextTicket = nextTicketNumberFromRows(ticketsResult.data);
   saveState();
   renderAll();
@@ -488,7 +495,7 @@ async function applySupabaseSession(session) {
 
   const { data, error } = await supabaseClient
     .from("app_users")
-    .select("full_name, role")
+    .select("id, full_name, role")
     .eq("auth_user_id", session.user.id)
     .eq("active", true)
     .single();
