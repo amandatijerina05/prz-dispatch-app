@@ -74,6 +74,7 @@ let supabaseProfile = null;
 let completionSaveInProgress = false;
 let inactivityTimer = null;
 let pendingDriverUnits = [];
+let authLoadId = 0;
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -451,6 +452,15 @@ function setSupabaseStatus(message, connected = false) {
   document.querySelector("#signOutButton").hidden = !connected;
 }
 
+function setAuthFormLoading(loading) {
+  const form = document.querySelector("#authForm");
+  const button = form.querySelector("button[type='submit']");
+  form.querySelectorAll("input, button").forEach((field) => {
+    field.disabled = loading;
+  });
+  button.textContent = loading ? "Signing in..." : "Sign in";
+}
+
 function clearInactivityTimer() {
   if (!inactivityTimer) return;
   clearTimeout(inactivityTimer);
@@ -483,12 +493,14 @@ function roleLabel(role) {
 }
 
 async function applySupabaseSession(session) {
+  const loadId = ++authLoadId;
   supabaseSession = session;
   supabaseProfile = null;
 
   if (!session?.user?.email) {
     clearInactivityTimer();
     setSupabaseStatus("Ready for login");
+    setAuthFormLoading(false);
     renderAll();
     return;
   }
@@ -500,14 +512,19 @@ async function applySupabaseSession(session) {
     .eq("active", true)
     .single();
 
+  if (loadId !== authLoadId) return;
+
   if (error || !data) {
     setSupabaseStatus(`${session.user.email} needs role setup`, true);
+    setAuthFormLoading(false);
     return;
   }
 
   supabaseProfile = data;
   state.role = data.role;
   setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
+  document.querySelector("#authForm").reset();
+  setAuthFormLoading(false);
   resetInactivityTimer();
   await loadSupabaseReferenceData();
   renderAll();
@@ -538,12 +555,21 @@ async function signInWithSupabase(email, password) {
     alert("Supabase is not connected yet.");
     return;
   }
-  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (!email || !password) {
+    alert("Enter both email and password.");
+    return;
+  }
+  setAuthFormLoading(true);
+  setSupabaseStatus("Signing in...");
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) {
+    setAuthFormLoading(false);
+    setSupabaseStatus("Ready for login");
     alert(error.message);
     return;
   }
-  document.querySelector("#authForm").reset();
+  setSupabaseStatus("Loading account...");
+  await applySupabaseSession(data.session);
 }
 
 async function signOutOfSupabase() {

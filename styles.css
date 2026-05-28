@@ -323,6 +323,13 @@ body.login-screen .connection-card {
   background: var(--red-dark);
 }
 
+.primary-button:disabled,
+.ghost-button:disabled,
+.small-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .ghost-button,
 .small-button,
 .segment {
