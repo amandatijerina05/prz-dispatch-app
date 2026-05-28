@@ -181,7 +181,7 @@ function mapUser(row) {
     authUserId: row.auth_user_id,
     name: row.full_name,
     username: row.username,
-    role: row.role,
+    role: normalizeRole(row.role),
   };
 }
 
@@ -427,6 +427,7 @@ async function refreshAdminUsers() {
     adminUsersLoadStatus = `Loaded ${state.users.length} active ${state.users.length === 1 ? "user" : "users"}.`;
     saveState();
     renderSelects();
+    renderAdmin();
   } catch (error) {
     adminUsersLoadStatus = `Could not load users: ${error.message}`;
   } finally {
@@ -840,7 +841,8 @@ function renderSelects() {
   const driverOptions = visibleDrivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
-  const driverUserOptions = `<option value="">No login user</option>${state.users.filter((user) => user.role === "driver").map((user) => `<option value="${user.id}">${user.name} (${user.username})</option>`).join("")}`;
+  const assignableUsers = state.users.filter((user) => ["driver", "admin"].includes(normalizeRole(user.role)));
+  const driverUserOptions = `<option value="">No login user</option>${assignableUsers.map((user) => `<option value="${user.id}">${user.name} (${roleLabel(user.role)} - ${user.username})</option>`).join("")}`;
   const activeTicketOptions = state.tickets
     .filter((ticket) => state.role !== "driver" || (driver && ticket.driverId === driver.id))
     .filter((ticket) => !["Invoiced", "Canceled"].includes(ticket.status))
