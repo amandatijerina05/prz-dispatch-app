@@ -950,7 +950,7 @@ function buildTicketCard(ticket, context = "dispatch") {
     if (!["Invoiced", "Canceled"].includes(ticket.status)) {
       actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
     }
-    if (!closedStatuses.includes(ticket.status)) {
+    if (canCancelTicket(ticket)) {
       actions.append(actionButton("Cancel ticket", () => cancelTicket(ticket.id), "danger-inline"));
     }
   }
@@ -1263,14 +1263,18 @@ async function updateTicket(id, status) {
 }
 
 function cancelTicket(id) {
-  if (!["admin", "dispatcher"].includes(state.role)) {
-    alert("Only dispatch or admin users can cancel a work ticket.");
+  if (!["admin", "dispatcher", "approver", "invoicing"].includes(state.role)) {
+    alert("Only office users can cancel a work ticket.");
     return;
   }
   const ticket = state.tickets.find((item) => item.id === id);
-  if (!ticket || closedStatuses.includes(ticket.status)) return;
+  if (!ticket || !canCancelTicket(ticket)) return;
   if (!confirm(`Cancel work ticket ${id}?`)) return;
   updateTicket(id, "Canceled");
+}
+
+function canCancelTicket(ticket) {
+  return Boolean(ticket) && !["Invoiced", "Canceled"].includes(ticket.status) && state.role !== "driver";
 }
 
 function updateEquipmentFromTickets(equipmentId) {
