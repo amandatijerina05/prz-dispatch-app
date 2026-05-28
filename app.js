@@ -72,6 +72,7 @@ let supabaseSession = null;
 let supabaseProfile = null;
 let completionSaveInProgress = false;
 let inactivityTimer = null;
+let pendingDriverUnits = [];
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const closedStatuses = ["Completed", "Invoiced", "Canceled"];
@@ -575,22 +576,6 @@ function equipmentTypeOptions() {
   return EQUIPMENT_TYPES.map((type) => `<option value="${type}">${type}</option>`).join("");
 }
 
-function driverEquipmentTypeOptions() {
-  return EQUIPMENT_TYPES.map((type) => `<label class="check-option"><input type="checkbox" name="driverEquipmentTypes" value="${type}" />${type}</label>`).join("");
-}
-
-function driverEquipmentUnitOptions(name = "driverEquipmentUnits", selectedIds = []) {
-  return state.equipment.map((item) => `<label class="check-option"><input type="checkbox" name="${name}" value="${item.id}" ${selectedIds.includes(item.id) ? "checked" : ""} />${item.name} (${item.type})</label>`).join("") || `<span class="muted-small">Add equipment units first.</span>`;
-}
-
-function selectedDriverEquipmentTypes() {
-  return [...document.querySelectorAll("input[name='driverEquipmentTypes']:checked")].map((input) => input.value);
-}
-
-function selectedDriverEquipmentUnits(name = "driverEquipmentUnits") {
-  return [...document.querySelectorAll(`input[name='${name}']:checked`)].map((input) => input.value);
-}
-
 function equipmentForDriver(driverId) {
   const driver = findDriver(driverId);
   const assignedEquipmentIds = driver?.assignedEquipmentIds || [];
@@ -608,6 +593,58 @@ function renderEquipmentOptionsForDriver() {
   const options = equipmentForDriver(driverId).map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
   equipmentSelect.innerHTML = options || `<option value="">No matching equipment for driver</option>`;
   if (equipmentForDriver(driverId).some((item) => item.id === currentEquipmentId)) equipmentSelect.value = currentEquipmentId;
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function renderPendingDriverUnits() {
+  const list = document.querySelector("#driverUnitList");
+  if (!list) return;
+  list.innerHTML = pendingDriverUnits.length
+    ? pendingDriverUnits.map((unit, index) => `
+      <div class="unit-chip">
+        <span><strong>${unit.name}</strong> ${unit.type}</span>
+        <button class="small-button remove-pending-unit" data-index="${index}" type="button">Remove</button>
+      </div>`).join("")
+    : `<span class="muted-small">No units added yet.</span>`;
+  document.querySelectorAll(".remove-pending-unit").forEach((button) => button.addEventListener("click", () => {
+    pendingDriverUnits.splice(Number(button.dataset.index), 1);
+    renderPendingDriverUnits();
+  }));
+}
+
+function addPendingDriverUnit() {
+  const nameField = document.querySelector("#driverUnitName");
+  const typeField = document.querySelector("#driverUnitType");
+  const name = nameField.value.trim();
+  if (!name) {
+    alert("Enter a unit name before adding it to the driver.");
+    return;
+  }
+  pendingDriverUnits.push({ name, type: typeField.value });
+  nameField.value = "";
+  renderPendingDriverUnits();
+}
+
+async function createEquipmentUnitsForDriver(units) {
+  if (!units.length) return [];
+  const rows = units.map((unit) => ({
+    name: unit.name,
+    type: unit.type,
+    status: "Available",
+    certification_due: "2026-12-31",
+    next_service_due: "2026-06-30",
+  }));
+  if (supabaseSession) {
+    const { data, error } = await supabaseClient.from("equipment").insert(rows).select("*");
+    if (error) throw error;
+    return data.map(mapEquipment);
+  }
+  const created = rows.map((row) => ({ id: uid("eq"), name: row.name, type: row.type, status: row.status, cert: row.certification_due, nextService: row.next_service_due }));
+  state.equipment.push(...created);
+  return created;
 }
 
 function ticketTotal(ticket) {
@@ -709,12 +746,12 @@ function renderSelects() {
   document.querySelector("#driver").innerHTML = driverOptions;
   document.querySelector("#driverQueueSelect").innerHTML = driverOptions;
   document.querySelector("#equipmentType").innerHTML = equipmentTypeOptions();
-  document.querySelector("#driverEquipmentTypes").innerHTML = driverEquipmentTypeOptions();
-  document.querySelector("#driverEquipmentUnits").innerHTML = driverEquipmentUnitOptions();
+  document.querySelector("#driverUnitType").innerHTML = equipmentTypeOptions();
   document.querySelector("#customerSelect").innerHTML = customerOptions;
   document.querySelector("#maintenanceEquipment").innerHTML = maintenanceOptions;
   document.querySelector("#driverUser").innerHTML = driverUserOptions;
   document.querySelector("#signatureTicketSelect").innerHTML = activeTicketOptions || `<option value="">No open tickets</option>`;
+  renderPendingDriverUnits();
   renderEquipmentOptionsForDriver();
 
   if (state.drivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
@@ -1306,26 +1343,37 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   renderDriverQueue();
 });
 
-document.querySelector("#driverForm").addEventListener("submit", (event) => {
+document.querySelector("#driverForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  let createdUnits = [];
+  try {
+    createdUnits = await createEquipmentUnitsForDriver(pendingDriverUnits);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
   const driver = {
     name: document.querySelector("#driverName").value.trim(),
     phone: document.querySelector("#driverPhone").value.trim(),
     user_id: document.querySelector("#driverUser").value || null,
-    equipment_types: selectedDriverEquipmentTypes(),
-    assigned_equipment_ids: selectedDriverEquipmentUnits(),
+    equipment_types: uniqueValues(createdUnits.map((unit) => unit.type)),
+    assigned_equipment_ids: createdUnits.map((unit) => unit.id),
   };
   if (supabaseSession) {
-    supabaseClient.from("drivers").insert(driver).then(async ({ error }) => {
-      if (error) return alert(error.message);
-      form.reset();
-      await loadSupabaseReferenceData();
-    });
+    const { error } = await supabaseClient.from("drivers").insert(driver);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    pendingDriverUnits = [];
+    form.reset();
+    await loadSupabaseReferenceData();
     return;
   }
   state.drivers.push({ id: uid("drv"), name: driver.name, phone: driver.phone, user_id: driver.user_id, equipmentTypes: driver.equipment_types, assignedEquipmentIds: driver.assigned_equipment_ids });
-  event.currentTarget.reset();
+  pendingDriverUnits = [];
+  form.reset();
   renderAll();
 });
 
@@ -1517,6 +1565,7 @@ document.querySelectorAll(".nav-tab").forEach((button) => button.addEventListene
 document.querySelector("#statusFilter").addEventListener("change", renderTickets);
 document.querySelector("#driverQueueSelect").addEventListener("change", renderDriverQueue);
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
+document.querySelector("#addDriverUnit").addEventListener("click", addPendingDriverUnit);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
   state.role = event.target.value;
   renderAll();

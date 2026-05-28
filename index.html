@@ -284,13 +284,14 @@
                 <input id="driverName" required placeholder="Driver name" />
                 <input id="driverPhone" required placeholder="Phone" />
                 <select id="driverUser"><option value="">No login user</option></select>
-                <fieldset class="check-grid">
-                  <legend>Equipment types</legend>
-                  <div id="driverEquipmentTypes"></div>
-                </fieldset>
-                <fieldset class="check-grid">
-                  <legend>Assigned units</legend>
-                  <div id="driverEquipmentUnits"></div>
+                <fieldset class="unit-builder">
+                  <legend>Driver units</legend>
+                  <div class="unit-builder-row">
+                    <input id="driverUnitName" placeholder="Unit name or number" />
+                    <select id="driverUnitType"></select>
+                    <button class="small-button" id="addDriverUnit" type="button">Add unit</button>
+                  </div>
+                  <div class="unit-list" id="driverUnitList"></div>
                 </fieldset>
                 <button class="primary-button" type="submit">Add driver</button>
               </form>

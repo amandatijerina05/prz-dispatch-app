@@ -713,7 +713,8 @@ button:focus-visible {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.check-grid {
+.check-grid,
+.unit-builder {
   min-width: 0;
   margin: 0;
   padding: 12px;
@@ -721,7 +722,8 @@ button:focus-visible {
   border-radius: 8px;
 }
 
-.check-grid legend {
+.check-grid legend,
+.unit-builder legend {
   padding: 0 6px;
   color: var(--muted);
   font-size: 0.8rem;
@@ -746,6 +748,39 @@ button:focus-visible {
 
 .check-option input {
   width: auto;
+}
+
+.unit-builder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 160px) auto;
+  gap: 8px;
+}
+
+.unit-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.unit-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.unit-chip span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.unit-chip strong {
+  color: var(--ink);
 }
 
 .driver-row {
