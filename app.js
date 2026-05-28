@@ -420,19 +420,19 @@ async function refreshAdminUsers() {
   if (state.role !== "admin" || !supabaseSession?.access_token || adminUsersLoading) return;
   adminUsersLoading = true;
   adminUsersLoadStatus = "Loading users...";
-  renderAdmin();
+  renderAdminIfAvailable();
 
   try {
     state.users = await loadAdminUsers();
     adminUsersLoadStatus = `Loaded ${state.users.length} active ${state.users.length === 1 ? "user" : "users"}.`;
     saveState();
     renderSelects();
-    renderAdmin();
+    renderAdminIfAvailable();
   } catch (error) {
     adminUsersLoadStatus = `Could not load users: ${error.message}`;
   } finally {
     adminUsersLoading = false;
-    renderAdmin();
+    renderAdminIfAvailable();
   }
 }
 
@@ -511,17 +511,29 @@ function trackUserActivity() {
 }
 
 function roleLabel(role) {
+  const normalized = normalizeRole(role);
   return {
     admin: "Admin",
     dispatcher: "Dispatcher",
     driver: "Driver",
     invoicing: "Invoicing",
     maintenance: "Maintenance",
-  }[role] || role;
+  }[normalized] || role;
 }
 
 function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
+  const value = String(role || "").trim().toLowerCase();
+  return {
+    adminrole: "admin",
+    dispatcherrole: "dispatcher",
+    driverrole: "driver",
+    invoicingrole: "invoicing",
+    maintenancerole: "maintenance",
+  }[value] || value.replace(/role$/, "");
+}
+
+function renderAdminIfAvailable() {
+  if (document.querySelector("#userList")) renderAdmin();
 }
 
 async function applySupabaseSession(session) {
