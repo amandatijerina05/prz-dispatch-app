@@ -368,6 +368,16 @@ body.driver-mode .stats-grid {
   display: none;
 }
 
+body.driver-mode .nav-tab:not([data-view="drivers"]):not([data-view="notifications"]),
+body.driver-mode .view:not(#driversView):not(#notificationsView) {
+  display: none !important;
+}
+
+body.driver-mode #driversView.active,
+body.driver-mode #notificationsView.active {
+  display: block !important;
+}
+
 .driver-app-banner {
   display: none;
   align-items: center;

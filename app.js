@@ -821,6 +821,7 @@ function applyRole() {
     button.hidden = !canView;
     button.classList.toggle("is-role-hidden", !canView);
     button.setAttribute("aria-hidden", String(!canView));
+    button.style.display = canView ? "" : "none";
   });
   document.querySelector("#roleSelect").value = effectiveRole;
   document.querySelector("#activeRoleLabel").textContent = roleLabel(effectiveRole);
