@@ -519,6 +519,10 @@ function roleLabel(role) {
   }[role] || role;
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
 async function applySupabaseSession(session) {
   const loadId = ++authLoadId;
   supabaseSession = session;
@@ -547,11 +551,12 @@ async function applySupabaseSession(session) {
     return;
   }
 
-  supabaseProfile = data;
-  state.role = data.role;
-  setSupabaseStatus(`${data.full_name} (${roleLabel(data.role)})`, true);
-  document.querySelector("#activeRoleLabel").textContent = roleLabel(data.role);
-  document.querySelector("#roleSelect").value = data.role;
+  supabaseProfile = { ...data, role: normalizeRole(data.role) };
+  state.role = supabaseProfile.role;
+  setSupabaseStatus(`${data.full_name} (${roleLabel(supabaseProfile.role)})`, true);
+  document.querySelector("#activeRoleLabel").textContent = roleLabel(supabaseProfile.role);
+  document.querySelector("#roleSelect").value = supabaseProfile.role;
+  applyRole();
   document.querySelector("#authForm").reset();
   setAuthFormLoading(false);
   resetInactivityTimer();
@@ -645,7 +650,7 @@ function findDriver(id) {
 }
 
 function lockRoleToProfile() {
-  if (supabaseProfile?.role) state.role = supabaseProfile.role;
+  if (supabaseProfile?.role) state.role = normalizeRole(supabaseProfile.role);
 }
 
 function currentDriver() {
@@ -808,9 +813,9 @@ function setView(name) {
 
 function applyRole() {
   lockRoleToProfile();
-  const effectiveRole = supabaseProfile?.role || state.role;
+  const effectiveRole = normalizeRole(supabaseProfile?.role || state.role);
   state.role = effectiveRole;
-  const allowed = permissions[effectiveRole];
+  const allowed = permissions[effectiveRole] || permissions.driver;
   document.querySelectorAll(".nav-tab").forEach((button) => {
     const canView = allowed.includes(button.dataset.view);
     button.hidden = !canView;
@@ -1152,6 +1157,7 @@ function renderAdmin() {
 
 function renderAll() {
   lockRoleToProfile();
+  applyRole();
   renderSelects();
   renderStats();
   renderTickets();
@@ -1163,7 +1169,6 @@ function renderAll() {
   renderReports();
   renderNotifications();
   renderAdmin();
-  applyRole();
   saveState();
 }
 
