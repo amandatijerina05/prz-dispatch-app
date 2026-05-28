@@ -808,7 +808,10 @@ function applyRole() {
   lockRoleToProfile();
   const allowed = permissions[state.role];
   document.querySelectorAll(".nav-tab").forEach((button) => {
-    button.hidden = !allowed.includes(button.dataset.view);
+    const canView = allowed.includes(button.dataset.view);
+    button.hidden = !canView;
+    button.classList.toggle("is-role-hidden", !canView);
+    button.setAttribute("aria-hidden", String(!canView));
   });
   document.querySelector("#roleSelect").value = state.role;
   document.querySelector("#activeRoleLabel").textContent = roleLabel(state.role);

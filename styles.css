@@ -150,8 +150,9 @@ body.login-screen .login-brand-title {
   gap: 8px;
 }
 
-.nav-tab[hidden] {
-  display: none;
+.nav-tab[hidden],
+.nav-tab.is-role-hidden {
+  display: none !important;
 }
 
 .role-card {
