@@ -641,7 +641,12 @@ function findDriver(id) {
   return state.drivers.find((driver) => driver.id === id);
 }
 
+function lockRoleToProfile() {
+  if (supabaseProfile?.role) state.role = supabaseProfile.role;
+}
+
 function currentDriver() {
+  lockRoleToProfile();
   if (state.role !== "driver" || !supabaseProfile) return null;
   return state.drivers.find((driver) => driver.user_id === supabaseProfile.id) || null;
 }
@@ -785,6 +790,7 @@ function missingDispatchFields(data) {
 }
 
 function setView(name) {
+  lockRoleToProfile();
   const allowed = permissions[state.role];
   const safeName = allowed.includes(name) ? name : allowed[0];
   document.querySelectorAll(".view").forEach((view) => {
@@ -798,6 +804,7 @@ function setView(name) {
 }
 
 function applyRole() {
+  lockRoleToProfile();
   const allowed = permissions[state.role];
   document.querySelectorAll(".nav-tab").forEach((button) => {
     button.hidden = !allowed.includes(button.dataset.view);
@@ -811,20 +818,23 @@ function applyRole() {
 }
 
 function renderSelects() {
+  lockRoleToProfile();
   const activeDriverId = document.querySelector("#driverQueueSelect").value;
   const activeSignatureTicket = document.querySelector("#signatureTicketSelect").value;
-  const visibleDrivers = state.role === "driver" && currentDriver() ? [currentDriver()] : state.drivers;
+  const driver = currentDriver();
+  const visibleDrivers = state.role === "driver" ? (driver ? [driver] : []) : state.drivers;
   const driverOptions = visibleDrivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
   const driverUserOptions = `<option value="">No login user</option>${state.users.filter((user) => user.role === "driver").map((user) => `<option value="${user.id}">${user.name} (${user.username})</option>`).join("")}`;
   const activeTicketOptions = state.tickets
+    .filter((ticket) => state.role !== "driver" || (driver && ticket.driverId === driver.id))
     .filter((ticket) => !["Invoiced", "Canceled"].includes(ticket.status))
     .map((ticket) => `<option value="${ticket.id}">${ticket.id} - ${customerName(ticket.customerId)}</option>`)
     .join("");
 
   document.querySelector("#driver").innerHTML = driverOptions;
-  document.querySelector("#driverQueueSelect").innerHTML = driverOptions;
+  document.querySelector("#driverQueueSelect").innerHTML = driverOptions || `<option value="">No linked driver profile</option>`;
   document.querySelector("#equipmentType").innerHTML = equipmentTypeOptions();
   document.querySelector("#driverUnitType").innerHTML = equipmentTypeOptions();
   document.querySelector("#customerSelect").innerHTML = customerOptions;
@@ -923,9 +933,9 @@ function renderTickets() {
 function renderDriverQueue() {
   const select = document.querySelector("#driverQueueSelect");
   const lockedDriver = currentDriver();
-  const driverId = lockedDriver?.id || select.value || state.drivers[0]?.id;
+  const driverId = state.role === "driver" ? lockedDriver?.id : select.value || state.drivers[0]?.id;
   if (driverId && select.value !== driverId) select.value = driverId;
-  select.disabled = Boolean(lockedDriver);
+  select.disabled = state.role === "driver";
   const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status)).sort((a, b) => a.jobDate.localeCompare(b.jobDate));
   const activeCount = tickets.filter((ticket) => ticket.status !== "Completed").length;
   const completedCount = tickets.filter((ticket) => ticket.status === "Completed").length;
@@ -946,7 +956,7 @@ function renderDriverQueue() {
 
 function focusDriverTickets(mode) {
   const select = document.querySelector("#driverQueueSelect");
-  const driverId = currentDriver()?.id || select.value || state.drivers[0]?.id;
+  const driverId = state.role === "driver" ? currentDriver()?.id : select.value || state.drivers[0]?.id;
   const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status));
   const visibleTickets = mode === "completed"
     ? tickets.filter((ticket) => ticket.status === "Completed")
@@ -1133,6 +1143,7 @@ function renderAdmin() {
 }
 
 function renderAll() {
+  lockRoleToProfile();
   renderSelects();
   renderStats();
   renderTickets();
@@ -1699,6 +1710,11 @@ document.querySelector("#driverQueueSelect").addEventListener("change", renderDr
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
 document.querySelector("#addDriverUnit").addEventListener("click", addPendingDriverUnit);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
+  if (supabaseProfile?.role) {
+    state.role = supabaseProfile.role;
+    renderAll();
+    return;
+  }
   state.role = event.target.value;
   renderAll();
 });
