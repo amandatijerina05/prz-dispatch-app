@@ -1085,7 +1085,8 @@ function renderOperations() {
     <div class="map-pin">
       <strong>${ticket.site}</strong>
       <span>${ticket.id} | ${customerName(ticket.customerId)}</span>
-      <span>${findEquipment(ticket.equipmentId)?.name || "No equipment"} | ${ticket.status}</span>
+      <span>${findDriver(ticket.driverId)?.name || "Unassigned driver"} | Unit: ${findEquipment(ticket.equipmentId)?.name || "No unit assigned"}</span>
+      <span>${ticket.status}</span>
     </div>
   `).join("") || `<div class="empty-state">No job sites to map.</div>`;
 }
