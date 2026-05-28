@@ -570,6 +570,11 @@ function findDriver(id) {
   return state.drivers.find((driver) => driver.id === id);
 }
 
+function currentDriver() {
+  if (state.role !== "driver" || !supabaseProfile) return null;
+  return state.drivers.find((driver) => driver.user_id === supabaseProfile.id) || null;
+}
+
 function findEquipment(id) {
   return state.equipment.find((equipment) => equipment.id === id);
 }
@@ -736,7 +741,8 @@ function applyRole() {
 function renderSelects() {
   const activeDriverId = document.querySelector("#driverQueueSelect").value;
   const activeSignatureTicket = document.querySelector("#signatureTicketSelect").value;
-  const driverOptions = state.drivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
+  const visibleDrivers = state.role === "driver" && currentDriver() ? [currentDriver()] : state.drivers;
+  const driverOptions = visibleDrivers.map((driver) => `<option value="${driver.id}">${driver.name}</option>`).join("");
   const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${customer.name}</option>`).join("");
   const maintenanceOptions = state.equipment.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
   const driverUserOptions = `<option value="">No login user</option>${state.users.filter((user) => user.role === "driver").map((user) => `<option value="${user.id}">${user.name} (${user.username})</option>`).join("")}`;
@@ -756,7 +762,8 @@ function renderSelects() {
   renderPendingDriverUnits();
   renderEquipmentOptionsForDriver();
 
-  if (state.drivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
+  if (visibleDrivers.some((driver) => driver.id === activeDriverId)) document.querySelector("#driverQueueSelect").value = activeDriverId;
+  if (state.role === "driver" && currentDriver()) document.querySelector("#driverQueueSelect").value = currentDriver().id;
   if (state.tickets.some((ticket) => ticket.id === activeSignatureTicket)) document.querySelector("#signatureTicketSelect").value = activeSignatureTicket;
 }
 
@@ -843,8 +850,10 @@ function renderTickets() {
 
 function renderDriverQueue() {
   const select = document.querySelector("#driverQueueSelect");
-  const driverId = select.value || state.drivers[0]?.id;
+  const lockedDriver = currentDriver();
+  const driverId = lockedDriver?.id || select.value || state.drivers[0]?.id;
   if (driverId && select.value !== driverId) select.value = driverId;
+  select.disabled = Boolean(lockedDriver);
   const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status)).sort((a, b) => a.jobDate.localeCompare(b.jobDate));
   const activeCount = tickets.filter((ticket) => ticket.status !== "Completed").length;
   const completedCount = tickets.filter((ticket) => ticket.status === "Completed").length;
@@ -865,7 +874,7 @@ function renderDriverQueue() {
 
 function focusDriverTickets(mode) {
   const select = document.querySelector("#driverQueueSelect");
-  const driverId = select.value || state.drivers[0]?.id;
+  const driverId = currentDriver()?.id || select.value || state.drivers[0]?.id;
   const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status));
   const visibleTickets = mode === "completed"
     ? tickets.filter((ticket) => ticket.status === "Completed")
@@ -990,7 +999,11 @@ function reportBars(totals) {
 }
 
 function renderNotifications() {
-  document.querySelector("#notificationList").innerHTML = state.notifications.map((note) => `
+  const driver = currentDriver();
+  const notes = driver
+    ? state.notifications.filter((note) => [driver.id, driver.name, "driver"].includes(note.audience))
+    : state.notifications;
+  document.querySelector("#notificationList").innerHTML = notes.map((note) => `
     <div class="admin-row">
       <div><strong>${note.message}</strong><span>${new Date(note.at).toLocaleString()} | ${note.audience}</span></div>
     </div>`).join("") || `<div class="empty-state">No notifications yet.</div>`;
@@ -1378,7 +1391,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
       ticket.id = savedTicket.ticket_number;
       await uploadTicketFiles(savedTicket.id, savedTicket.ticket_number, document.querySelector("#ticketFiles"), "ticket-attachments", "dispatch");
       const smsResult = await sendWorkTicketSms(ticket);
-      notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
+      notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, savedTicket.driver_id || "driver");
       if (!smsResult.sent) notify(`${ticket.id} was saved, but SMS was not sent: ${smsResult.error}`, "dispatch");
       form.reset();
       document.querySelector("#jobDate").value = todayISO();
@@ -1394,7 +1407,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   state.tickets.push(ticket);
   state.nextTicket += 1;
   updateEquipmentFromTickets(ticket.equipmentId);
-  notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, "driver");
+  notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, ticket.driverId || "driver");
   event.currentTarget.reset();
   document.querySelector("#jobDate").value = todayISO();
   renderAll();

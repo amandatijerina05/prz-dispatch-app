@@ -58,6 +58,7 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 - `supabase-storage-policies.sql` enables ticket attachment, driver photo, and signature uploads.
 - `supabase-clean-duplicate-attachments.sql` removes duplicate attachment records from earlier testing.
 - `supabase-equipment-driver-types.sql` adds driver equipment-type assignments and PRZ equipment models.
+- `supabase-driver-notification-policy.sql` restricts driver notification reads to their own messages.
 
 ## Production Environment Variables
 
