@@ -1,6 +1,6 @@
 const STORAGE_KEY = "prz-dispatch-app-v2";
 const INACTIVITY_TIMEOUT_MINUTES = 30;
-const EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
+const DEFAULT_EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
 
 const permissions = {
   admin: ["dispatch", "drivers", "invoicing", "customers", "operations", "maintenance", "reports", "notifications", "admin"],
@@ -58,6 +58,7 @@ const defaultState = {
       instructions: "PO required on every ticket.",
     },
   ],
+  equipmentTypes: [...DEFAULT_EQUIPMENT_TYPES],
   maintenance: [],
   notifications: [],
   tickets: [],
@@ -92,6 +93,7 @@ function normalizeState(data) {
   data.users ||= structuredClone(defaultState.users);
   data.maintenance ||= [];
   data.notifications ||= [];
+  data.equipmentTypes ||= [...DEFAULT_EQUIPMENT_TYPES];
   data.role ||= "admin";
   data.drivers = (data.drivers || []).map((driver) => ({
     equipmentTypes: [],
@@ -573,7 +575,7 @@ function findEquipment(id) {
 }
 
 function equipmentTypeOptions() {
-  return EQUIPMENT_TYPES.map((type) => `<option value="${type}">${type}</option>`).join("");
+  return state.equipmentTypes.map((type) => `<option value="${type}">${type}</option>`).join("");
 }
 
 function equipmentForDriver(driverId) {
@@ -1020,7 +1022,7 @@ function renderAdmin() {
           <button class="small-button add-existing-driver-unit" type="button">Add unit</button>
         </div>
         <select class="driver-type-assignment" multiple aria-label="Equipment types for ${driver.name}">
-          ${EQUIPMENT_TYPES.map((type) => `<option value="${type}" ${driver.equipmentTypes?.includes(type) ? "selected" : ""}>${type}</option>`).join("")}
+          ${state.equipmentTypes.map((type) => `<option value="${type}" ${driver.equipmentTypes?.includes(type) ? "selected" : ""}>${type}</option>`).join("")}
         </select>
         <select class="driver-unit-assignment" multiple aria-label="Assigned units for ${driver.name}">
           ${state.equipment.map((item) => `<option value="${item.id}" ${driver.assignedEquipmentIds?.includes(item.id) ? "selected" : ""}>${item.name} (${item.type})</option>`).join("")}
@@ -1029,12 +1031,12 @@ function renderAdmin() {
       </form>
       <button class="small-button remove-driver" data-id="${driver.id}" type="button">Remove</button>
     </div>`).join("");
-  document.querySelector("#equipmentList").innerHTML = state.equipment.map((item) => `
-    <div class="admin-row"><div><strong>${item.name}</strong><span>${item.type} | ${item.status}</span></div><button class="small-button remove-equipment" data-id="${item.id}" type="button">Remove</button></div>`).join("");
+  document.querySelector("#equipmentList").innerHTML = state.equipmentTypes.map((type) => `
+    <div class="admin-row"><div><strong>${type}</strong><span>Equipment type</span></div><button class="small-button remove-equipment-type" data-type="${type}" type="button">Remove</button></div>`).join("");
   document.querySelectorAll(".remove-driver").forEach((button) => button.addEventListener("click", () => removeDriver(button.dataset.id)));
   document.querySelectorAll(".driver-assignment-form").forEach((form) => form.addEventListener("submit", updateDriverAssignments));
   document.querySelectorAll(".add-existing-driver-unit").forEach((button) => button.addEventListener("click", addUnitToExistingDriver));
-  document.querySelectorAll(".remove-equipment").forEach((button) => button.addEventListener("click", () => removeEquipment(button.dataset.id)));
+  document.querySelectorAll(".remove-equipment-type").forEach((button) => button.addEventListener("click", () => removeEquipmentType(button.dataset.type)));
   document.querySelectorAll(".remove-user").forEach((button) => button.addEventListener("click", () => removeUser(button.dataset.id)));
   document.querySelectorAll(".password-form").forEach((form) => form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1183,9 +1185,24 @@ async function addUnitToExistingDriver(event) {
   renderAll();
 }
 
-function removeEquipment(id) {
-  if (state.tickets.some((ticket) => ticket.equipmentId === id && !["Invoiced", "Canceled"].includes(ticket.status))) return alert("This equipment has open tickets.");
-  state.equipment = state.equipment.filter((item) => item.id !== id);
+function addEquipmentType(type) {
+  const cleanType = type.trim();
+  if (!cleanType) return alert("Enter an equipment type.");
+  if (state.equipmentTypes.some((item) => item.toLowerCase() === cleanType.toLowerCase())) {
+    alert("That equipment type already exists.");
+    return;
+  }
+  state.equipmentTypes.push(cleanType);
+  renderAll();
+}
+
+function removeEquipmentType(type) {
+  if (state.equipment.some((item) => item.type === type)) {
+    alert("This equipment type is being used by an assigned unit.");
+    return;
+  }
+  state.equipmentTypes = state.equipmentTypes.filter((item) => item !== type);
+  state.drivers = state.drivers.map((driver) => ({ ...driver, equipmentTypes: (driver.equipmentTypes || []).filter((item) => item !== type) }));
   renderAll();
 }
 
@@ -1422,25 +1439,8 @@ document.querySelector("#driverForm").addEventListener("submit", async (event) =
 
 document.querySelector("#equipmentForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const form = event.currentTarget;
-  const equipment = {
-    name: document.querySelector("#equipmentName").value.trim(),
-    type: document.querySelector("#equipmentType").value,
-    status: "Available",
-    certification_due: "2026-12-31",
-    next_service_due: "2026-06-30",
-  };
-  if (supabaseSession) {
-    supabaseClient.from("equipment").insert(equipment).then(async ({ error }) => {
-      if (error) return alert(error.message);
-      form.reset();
-      await loadSupabaseReferenceData();
-    });
-    return;
-  }
-  state.equipment.push({ id: uid("eq"), name: equipment.name, type: equipment.type, status: equipment.status, cert: equipment.certification_due, nextService: equipment.next_service_due });
+  addEquipmentType(document.querySelector("#equipmentTypeName").value);
   event.currentTarget.reset();
-  renderAll();
 });
 
 document.querySelector("#userForm").addEventListener("submit", (event) => {
