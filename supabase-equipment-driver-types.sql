@@ -20,6 +20,7 @@ check (type in (
   'Tractor',
   'Flatbed',
   'Drop Deck',
+  'Lowboy',
   'Eagle II',
   'Stepdeck',
   '379',

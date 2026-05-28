@@ -1,6 +1,6 @@
 const STORAGE_KEY = "prz-dispatch-app-v2";
 const INACTIVITY_TIMEOUT_MINUTES = 30;
-const DEFAULT_EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
+const DEFAULT_EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Lowboy", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
 
 const permissions = {
   admin: ["dispatch", "drivers", "invoicing", "customers", "operations", "maintenance", "reports", "notifications", "admin"],
@@ -745,7 +745,12 @@ async function createEquipmentUnitsForDriver(units) {
   }));
   if (supabaseSession) {
     const { data, error } = await supabaseClient.from("equipment").insert(rows).select("*");
-    if (error) throw error;
+    if (error) {
+      const message = error.message?.includes("equipment_type_check")
+        ? `The database does not allow one of these equipment types yet. Run the updated equipment SQL in Supabase, then try again. Supabase said: ${error.message}`
+        : error.message;
+      throw new Error(message);
+    }
     return data.map(mapEquipment);
   }
   const created = rows.map((row) => ({ id: uid("eq"), name: row.name, type: row.type, status: row.status, cert: row.certification_due, nextService: row.next_service_due }));

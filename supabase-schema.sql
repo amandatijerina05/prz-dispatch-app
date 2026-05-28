@@ -25,7 +25,7 @@ create table if not exists drivers (
 create table if not exists equipment (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  type text not null check (type in ('Crane', 'Truck', 'Trailer', 'Support', 'Tractor', 'Flatbed', 'Drop Deck', 'Eagle II', 'Stepdeck', '379', 'W900', 'CASCADIA 125', 'FB STEPDECK', 'T660', 'CASCADIA', '579', '387')),
+  type text not null check (type in ('Crane', 'Truck', 'Trailer', 'Support', 'Tractor', 'Flatbed', 'Drop Deck', 'Lowboy', 'Eagle II', 'Stepdeck', '379', 'W900', 'CASCADIA 125', 'FB STEPDECK', 'T660', 'CASCADIA', '579', '387')),
   status text not null default 'Available' check (status in ('Available', 'Assigned', 'Maintenance', 'Out of Service')),
   certification_due date,
   next_service_due date,
