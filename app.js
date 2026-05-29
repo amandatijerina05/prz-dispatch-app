@@ -1237,11 +1237,9 @@ function renderMaintenance() {
 
 function renderReports() {
   const customerTotals = sumBy(state.tickets, (ticket) => customerName(ticket.customerId));
-  const equipmentTotals = sumBy(state.tickets, (ticket) => findEquipment(ticket.equipmentId)?.name || "Unassigned");
   const uninvoiced = state.tickets.filter((ticket) => ticket.status === "Final Approved").reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
   renderTicketQueueReport();
   document.querySelector("#customerReport").innerHTML = reportBars(customerTotals);
-  document.querySelector("#equipmentReport").innerHTML = reportBars(equipmentTotals);
   document.querySelector("#uninvoicedReport").innerHTML = `
     <button class="report-drilldown" data-ar-watch-ready type="button">
       <span class="big-number">${moneyFormatter.format(uninvoiced)}</span>
