@@ -107,42 +107,51 @@
                 <span class="ticket-number" id="nextTicketNumber">PRZ-0000</span>
               </div>
 
-              <div class="form-grid two">
-                <label>Customer<select id="customerSelect" name="customerId" required></select></label>
-                <label>Job date<input id="jobDate" name="jobDate" required type="date" /></label>
-              </div>
-              <div class="form-grid two">
-                <label>Sales person<input id="salesPerson" name="salesPerson" required placeholder="Sales person name" /></label>
-                <label>Ordered By<input id="orderedBy" name="orderedBy" required placeholder="Person who ordered the job" /></label>
-              </div>
-              <label>AFV/PO #<input id="afvPoNumber" name="afvPoNumber" placeholder="Optional AFV or PO number" /></label>
-              <div class="form-grid two">
-                <label>Pickup<input id="pickupLocation" name="pickup" required placeholder="Pickup address, yard, or lease" /></label>
-                <label>Drop off<input id="dropoffLocation" name="dropoff" required placeholder="Drop off address, yard, or lease" /></label>
-              </div>
-              <div class="form-grid two">
-                <label>Service type<input id="serviceType" name="serviceType" required placeholder="Type service needed" /></label>
-                <label>Priority<select id="priority" name="priority" required><option>Standard</option><option>High</option><option>Emergency</option></select></label>
-              </div>
-              <div class="form-grid two">
-                <label>Driver<select id="driver" name="driverId" required></select></label>
-                <fieldset class="equipment-picker">
-                  <legend>Equipment</legend>
-                  <div id="equipment" class="equipment-checklist"></div>
-                </fieldset>
-              </div>
-              <div class="form-grid two">
-                <label>Start time<input id="startTime" name="startTime" required type="time" /></label>
-                <label>Estimated hours<input id="hours" min="0.5" name="hours" required step="0.5" type="number" value="4" /></label>
-              </div>
-              <div class="form-grid two">
-                <label>Mileage<input name="mileage" min="0" required step="1" type="number" value="0" /></label>
-              </div>
+              <section class="ticket-section">
+                <div class="section-heading"><span>1</span><h3>Customer and order</h3></div>
+                <div class="form-grid two">
+                  <label>Customer<select id="customerSelect" name="customerId" required></select></label>
+                  <label>Job date<input id="jobDate" name="jobDate" required type="date" /></label>
+                </div>
+                <div class="form-grid three">
+                  <label>Sales person<input id="salesPerson" name="salesPerson" required placeholder="Sales person name" /></label>
+                  <label>Ordered By<input id="orderedBy" name="orderedBy" required placeholder="Person who ordered the job" /></label>
+                  <label>AFV/PO #<input id="afvPoNumber" name="afvPoNumber" placeholder="Optional AFV or PO number" /></label>
+                </div>
+              </section>
+
+              <section class="ticket-section">
+                <div class="section-heading"><span>2</span><h3>Route and service</h3></div>
+                <div class="form-grid two">
+                  <label>Pickup<input id="pickupLocation" name="pickup" required placeholder="Pickup address, yard, or lease" /></label>
+                  <label>Drop off<input id="dropoffLocation" name="dropoff" required placeholder="Drop off address, yard, or lease" /></label>
+                </div>
+                <div class="form-grid three">
+                  <label>Service type<input id="serviceType" name="serviceType" required placeholder="Type service needed" /></label>
+                  <label>Priority<select id="priority" name="priority" required><option>Standard</option><option>High</option><option>Emergency</option></select></label>
+                  <label>Mileage<input name="mileage" min="0" required step="1" type="number" value="0" /></label>
+                </div>
+              </section>
+
+              <section class="ticket-section">
+                <div class="section-heading"><span>3</span><h3>Driver and equipment</h3></div>
+                <div class="driver-equipment-grid">
+                  <div class="form-grid two">
+                    <label>Driver<select id="driver" name="driverId" required></select></label>
+                    <label>Start time<input id="startTime" name="startTime" required type="time" /></label>
+                    <label>Estimated hours<input id="hours" min="0.5" name="hours" required step="0.5" type="number" value="4" /></label>
+                  </div>
+                  <fieldset class="equipment-picker">
+                    <legend>Equipment</legend>
+                    <div id="equipment" class="equipment-checklist"></div>
+                  </fieldset>
+                </div>
+              </section>
+
               <section class="line-items-panel">
                 <div class="line-items-heading">
                   <div>
-                    <p class="eyebrow">Ticket charges</p>
-                    <h3>Line items</h3>
+                    <div class="section-heading"><span>4</span><h3>Line items and charges</h3></div>
                   </div>
                   <button class="small-button" id="addLineItem" type="button">Add line</button>
                 </div>
@@ -154,9 +163,14 @@
                 </div>
                 <div class="line-items-total"><span>Total charges</span><strong id="lineItemsTotal">$0</strong></div>
               </section>
-              <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
-              <label>Work instructions<textarea id="notes" name="notes" required rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
-              <button class="primary-button" type="submit">Send work ticket to driver</button>
+              <section class="ticket-section">
+                <div class="section-heading"><span>5</span><h3>Notes and files</h3></div>
+                <label>Work instructions<textarea id="notes" name="notes" required rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
+                <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
+              </section>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Send work ticket to driver</button>
+              </div>
             </form>
 
             <section class="panel">

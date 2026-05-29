@@ -527,6 +527,52 @@ body.driver-mode #notificationsView.active {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+#dispatchView .view-grid {
+  grid-template-columns: minmax(520px, 1.25fr) minmax(340px, 0.75fr);
+}
+
+.ticket-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.ticket-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.section-heading span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--black);
+  color: var(--white);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.section-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.driver-equipment-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(280px, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+
 label,
 .compact-field {
   display: grid;
@@ -632,6 +678,12 @@ button:focus-visible {
 
 .line-items-heading h3 {
   margin: 0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .line-items-grid {
@@ -1173,6 +1225,7 @@ button:focus-visible {
   }
 
   .view-grid,
+  #dispatchView .view-grid,
   .admin-grid,
   .reports-grid {
     grid-template-columns: 1fr;
@@ -1193,6 +1246,7 @@ button:focus-visible {
 
   .stats-grid,
   .driver-summary,
+  .driver-equipment-grid,
   .form-grid.two,
   .form-grid.three,
   .inline-form,
