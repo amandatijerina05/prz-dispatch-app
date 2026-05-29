@@ -358,9 +358,17 @@ body.login-screen .connection-card {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+body[data-active-view="dispatch"] .stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-active-view="dispatch"] .dispatcher-hidden-metric {
+  display: none;
 }
 
 body.maintenance-mode .stats-grid,
