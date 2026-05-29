@@ -386,6 +386,17 @@
       </article>
     </template>
 
+    <dialog class="ticket-modal" id="ticketDetailModal">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">Work ticket</p>
+          <h2 id="ticketModalTitle">Ticket details</h2>
+        </div>
+        <button class="small-button" id="closeTicketModal" type="button">Close</button>
+      </div>
+      <div id="ticketModalBody"></div>
+    </dialog>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./app.js"></script>

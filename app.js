@@ -1211,6 +1211,51 @@ function buildTicketCard(ticket, context = "dispatch") {
   return card;
 }
 
+function lineItemsTableHtml(ticket) {
+  const items = ticket.lineItems || [];
+  if (!items.length) return `<div class="empty-state">No line items on this ticket.</div>`;
+  return `
+    <div class="modal-line-table">
+      <div class="modal-line-header"><span>Qty</span><span>Line item</span><span>Time in</span><span>Time out</span><span>Rate</span><span>Charges</span></div>
+      ${items.map((item) => `
+        <div class="modal-line-row">
+          <span>${item.quantity || ""}</span>
+          <span>${item.description || ""}</span>
+          <span>${item.timeIn || "--"}</span>
+          <span>${item.timeOut || "--"}</span>
+          <span>${moneyFormatter.format(Number(item.rate || 0))}</span>
+          <strong>${moneyFormatter.format(Number(item.charge || 0))}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function openTicketDetailModal(ticketId) {
+  const ticket = state.tickets.find((item) => item.id === ticketId);
+  const modal = document.querySelector("#ticketDetailModal");
+  const body = document.querySelector("#ticketModalBody");
+  if (!ticket || !modal || !body) return;
+  document.querySelector("#ticketModalTitle").textContent = `${ticket.id} - ${customerName(ticket.customerId)}`;
+  const files = uniqueNames([...(ticket.attachments || []), ...(ticket.driverAttachments || [])]);
+  body.innerHTML = `
+    <dl class="ticket-details modal-ticket-details">
+      ${ticketDetails(ticket).map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}
+    </dl>
+    <section class="modal-section">
+      <div class="section-heading"><span>1</span><h3>Line items</h3></div>
+      ${lineItemsTableHtml(ticket)}
+      <div class="line-items-total"><span>Total charges</span><strong>${formatAmount(ticket)}</strong></div>
+    </section>
+    <section class="modal-section">
+      <div class="section-heading"><span>2</span><h3>Notes and packet</h3></div>
+      <p class="ticket-notes">${ticket.driverNotes || ticket.notes || "No notes added."}</p>
+      <div class="attachment-list">${files.length ? files.map((name) => `<span class="file-chip">${name}</span>`).join("") : `<span class="muted-small">No attachments yet</span>`}</div>
+    </section>
+  `;
+  modal.showModal();
+}
+
 function actionButton(label, handler, extraClass = "") {
   const button = document.createElement("button");
   button.className = `small-button ${extraClass}`.trim();
@@ -1302,7 +1347,7 @@ function renderInvoices() {
     const packet = `${(ticket.attachments || []).length + (ticket.driverAttachments || []).length} files / ${ticket.signerName ? "signed" : "unsigned"}`;
     return `
       <tr>
-        <td><strong>${ticket.id}</strong><br><span>${displayDate(ticket.jobDate)}</span></td>
+        <td><button class="link-button invoice-ticket-open" data-ticket="${ticket.id}" type="button"><strong>${ticket.id}</strong></button><br><span>${displayDate(ticket.jobDate)}</span></td>
         <td>${customerName(ticket.customerId)}<br><span>${ticket.site}</span></td>
         <td>${ticket.serviceType}</td>
         <td>${findDriver(ticket.driverId)?.name || "Unassigned"}</td>
@@ -1316,6 +1361,7 @@ function renderInvoices() {
         </td>
       </tr>`;
   }).join("");
+  document.querySelectorAll(".invoice-ticket-open").forEach((button) => button.addEventListener("click", () => openTicketDetailModal(button.dataset.ticket)));
   document.querySelectorAll(".invoice-status-action").forEach((select) => select.addEventListener("change", () => updateTicket(select.dataset.ticket, select.value)));
 }
 
@@ -2238,6 +2284,11 @@ document.querySelector("#installAppButton").addEventListener("click", async () =
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
   document.querySelector("#installAppButton").hidden = true;
+});
+
+document.querySelector("#closeTicketModal").addEventListener("click", () => document.querySelector("#ticketDetailModal").close());
+document.querySelector("#ticketDetailModal").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
 });
 
 if ("serviceWorker" in navigator) {
