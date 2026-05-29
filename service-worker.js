@@ -1,4 +1,4 @@
-const CACHE_NAME = "prz-driver-shell-v55";
+const CACHE_NAME = "prz-driver-shell-v56";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

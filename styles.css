@@ -985,6 +985,27 @@ button:focus-visible {
   margin-top: 14px;
 }
 
+.report-drilldown {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-drilldown:hover .big-number,
+.report-drilldown:focus-visible .big-number {
+  color: var(--red);
+}
+
+.drilldown-hint {
+  color: var(--red);
+  font-weight: 900;
+}
+
 .bar {
   overflow: hidden;
   height: 10px;

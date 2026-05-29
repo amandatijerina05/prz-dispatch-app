@@ -1242,7 +1242,14 @@ function renderReports() {
   renderTicketQueueReport();
   document.querySelector("#customerReport").innerHTML = reportBars(customerTotals);
   document.querySelector("#equipmentReport").innerHTML = reportBars(equipmentTotals);
-  document.querySelector("#uninvoicedReport").innerHTML = `<div class="big-number">${moneyFormatter.format(uninvoiced)}</div><p class="muted-small">Final approved work waiting on invoicing.</p>`;
+  document.querySelector("#uninvoicedReport").innerHTML = `
+    <button class="report-drilldown" data-ar-watch-ready type="button">
+      <span class="big-number">${moneyFormatter.format(uninvoiced)}</span>
+      <span class="muted-small">Final approved work waiting on invoicing.</span>
+      <span class="drilldown-hint">Review ready to invoice tickets</span>
+    </button>
+  `;
+  document.querySelector("[data-ar-watch-ready]")?.addEventListener("click", () => openTicketQueue("ready"));
 }
 
 function renderTicketQueueReport() {
