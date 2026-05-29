@@ -964,12 +964,8 @@ function renderSelects() {
 
 function renderStats() {
   const buckets = ticketBuckets();
-  const revenue = state.tickets.reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
   document.querySelector("#openCount").textContent = buckets.open.tickets.length;
   document.querySelector("#driverCount").textContent = buckets.drivers.tickets.length;
-  document.querySelector("#approverCount").textContent = buckets.approver.tickets.length;
-  document.querySelector("#invoiceCount").textContent = buckets.ready.tickets.length;
-  document.querySelector("#revenueCount").textContent = moneyFormatter.format(revenue);
   document.querySelector("#nextTicketNumber").textContent = ticketNumber();
 }
 
