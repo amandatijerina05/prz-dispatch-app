@@ -51,6 +51,8 @@ create table if not exists work_tickets (
   equipment_id uuid references equipment(id),
   job_date date not null,
   job_site text not null,
+  sales_person text not null default '',
+  ordered_by text not null default '',
   service_type text not null,
   priority text not null check (priority in ('Standard', 'High', 'Emergency')),
   scheduled_start time not null,

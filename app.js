@@ -199,6 +199,8 @@ function mapTicket(row) {
     equipmentId: row.equipment_id,
     jobDate: row.job_date,
     site: row.job_site,
+    salesPerson: row.sales_person || "",
+    orderedBy: row.ordered_by || "",
     serviceType: row.service_type,
     priority: row.priority,
     startTime: row.scheduled_start?.slice(0, 5) || "",
@@ -231,6 +233,8 @@ function ticketToSupabase(ticket) {
     equipment_id: ticket.equipmentId,
     job_date: ticket.jobDate,
     job_site: ticket.site,
+    sales_person: ticket.salesPerson,
+    ordered_by: ticket.orderedBy,
     service_type: ticket.serviceType,
     priority: ticket.priority,
     scheduled_start: ticket.startTime,
@@ -801,6 +805,8 @@ function missingDispatchFields(data) {
   const labels = {
     customerId: "Customer",
     jobDate: "Job date",
+    salesPerson: "Sales person",
+    orderedBy: "Ordered By",
     pickup: "Pickup",
     dropoff: "Drop off",
     serviceType: "Service type",
@@ -924,6 +930,8 @@ function ticketDetails(ticket) {
     ["Actual", `${ticket.actualStart || "--"} to ${ticket.actualEnd || "--"}`],
     ["Amount", formatAmount(ticket)],
     ["Site", ticket.site],
+    ["Sales person", ticket.salesPerson || "Not entered"],
+    ["Ordered By", ticket.orderedBy || "Not entered"],
     ["Priority", ticket.priority],
     ["Signature", ticket.signerName ? `Signed by ${ticket.signerName}` : "Not signed"],
   ];
@@ -1446,7 +1454,7 @@ function downloadText(filename, text, type = "text/plain") {
 }
 
 function exportCsv() {
-  const rows = [["Ticket", "Customer", "Date", "Service", "Driver", "Equipment", "Status", "Amount", "Signed", "Files"]];
+  const rows = [["Ticket", "Customer", "Date", "Service", "Sales Person", "Ordered By", "Driver", "Equipment", "Status", "Amount", "Signed", "Files"]];
   const readyTickets = state.tickets.filter((ticket) => ticket.status === "Final Approved");
   if (!readyTickets.length) {
     alert("There are no final approved tickets ready to export for invoicing.");
@@ -1457,6 +1465,8 @@ function exportCsv() {
     customerName(ticket.customerId),
     ticket.jobDate,
     ticket.serviceType,
+    ticket.salesPerson || "",
+    ticket.orderedBy || "",
     findDriver(ticket.driverId)?.name || "",
     findEquipment(ticket.equipmentId)?.name || "",
     ticket.status,
@@ -1470,7 +1480,7 @@ function exportCsv() {
 function exportPacket() {
   const packet = state.tickets
     .filter((ticket) => ticket.status === "Final Approved")
-    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
+    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nSales person: ${ticket.salesPerson || "Not entered"}\nOrdered By: ${ticket.orderedBy || "Not entered"}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
     .join("\n\n---\n\n");
   downloadText("prz-invoice-packet.txt", packet || "No final approved tickets ready for invoicing.");
 }
@@ -1485,6 +1495,7 @@ function seedSampleDay() {
   state.tickets = [
     {
       id: "PRZ-1048", customerId: "cus-1", site: "County Road 118 lease pad", serviceType: "Crane lift", priority: "High",
+      salesPerson: "Amanda Tijerina", orderedBy: "Luis Moreno",
       driverId: "drv-1", equipmentId: "eq-1", jobDate: todayISO(), startTime: "07:30", hours: 6, rate: 225, mileage: 18,
       fuel: 95, minimum: 1000, overtimeHours: 0, attachments: ["lift-plan.pdf"], driverAttachments: ["compressor-set-photo.jpg"],
       notes: "Set compressor skid. Call site contact before entering the gate.", status: "In Progress", actualStart: "07:42",
@@ -1492,12 +1503,14 @@ function seedSampleDay() {
     },
     {
       id: "PRZ-1049", customerId: "cus-2", site: "South yard to Hobbs location", serviceType: "Trucking", priority: "Standard",
+      salesPerson: "Amanda Tijerina", orderedBy: "Yard manager",
       driverId: "drv-2", equipmentId: "eq-2", jobDate: todayISO(), startTime: "10:00", hours: 4, rate: 175, mileage: 42,
       fuel: 60, minimum: 650, overtimeHours: 0, attachments: ["bill-of-lading.pdf"], driverAttachments: [], notes: "Move pipe racks. Yard manager will load.",
       status: "Sent", createdAt: new Date(Date.now() - 3600000).toISOString(),
     },
     {
       id: "PRZ-1050", customerId: "cus-1", site: "PRZ yard", serviceType: "Rig move", priority: "Emergency",
+      salesPerson: "Amanda Tijerina", orderedBy: "Rig supervisor",
       driverId: "drv-3", equipmentId: "eq-3", jobDate: todayISO(), startTime: "13:00", hours: 8, rate: 250, mileage: 22,
       fuel: 125, minimum: 1500, overtimeHours: 1, attachments: ["route-permit.pdf"], driverAttachments: ["signed-ticket.jpg"],
       notes: "Confirm route before dispatch. Oversize load escort requested.", status: "Completed", actualStart: "13:05", actualEnd: "18:40",
@@ -1522,6 +1535,8 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     id: ticketNumber(),
     customerId: data.get("customerId"),
     site: routeText(String(data.get("pickup") || ""), String(data.get("dropoff") || "")),
+    salesPerson: data.get("salesPerson").trim(),
+    orderedBy: data.get("orderedBy").trim(),
     serviceType: data.get("serviceType"),
     priority: data.get("priority"),
     driverId: data.get("driverId"),
