@@ -902,14 +902,13 @@ function missingDispatchFields(data) {
     startTime: "Start time",
     hours: "Estimated hours",
     mileage: "Mileage",
-    fuel: "Fuel surcharge",
     notes: "Work instructions",
   };
 
   return Object.entries(labels).filter(([field]) => {
     const value = field === "equipmentIds" ? data.getAll(field).join("") : String(data.get(field) ?? "").trim();
     if (!value) return true;
-    if (["hours", "mileage", "fuel"].includes(field)) {
+    if (["hours", "mileage"].includes(field)) {
       const number = Number(value);
       return Number.isNaN(number) || number < 0 || (field === "hours" && number <= 0);
     }
@@ -1746,7 +1745,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     hours: Number(data.get("hours")),
     rate: 0,
     mileage: Number(data.get("mileage")),
-    fuel: Number(data.get("fuel")),
+    fuel: 0,
     minimum: 0,
     overtimeHours: 0,
     notes: data.get("notes").trim(),
