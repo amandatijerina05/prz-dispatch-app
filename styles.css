@@ -560,6 +560,60 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.equipment-picker {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.equipment-picker legend {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.equipment-checklist {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #cfd1d8;
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.equipment-choice {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+.equipment-choice input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.equipment-choice small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.empty-mini {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .ticket-list {
   display: grid;
   gap: 12px;

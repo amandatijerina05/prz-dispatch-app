@@ -126,7 +126,10 @@
               </div>
               <div class="form-grid two">
                 <label>Driver<select id="driver" name="driverId" required></select></label>
-                <label>Equipment<select id="equipment" name="equipmentIds" required multiple size="4"></select></label>
+                <fieldset class="equipment-picker">
+                  <legend>Equipment</legend>
+                  <div id="equipment" class="equipment-checklist"></div>
+                </fieldset>
               </div>
               <div class="form-grid two">
                 <label>Start time<input id="startTime" name="startTime" required type="time" /></label>

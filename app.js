@@ -776,17 +776,24 @@ function equipmentNames(ticket) {
 }
 
 function renderEquipmentOptionsForDriver() {
-  const equipmentSelect = document.querySelector("#equipment");
+  const equipmentList = document.querySelector("#equipment");
   const driverSelect = document.querySelector("#driver");
-  if (!equipmentSelect || !driverSelect) return;
+  if (!equipmentList || !driverSelect) return;
   const driverId = driverSelect.value;
-  const currentEquipmentIds = selectedOptions(equipmentSelect);
-  const options = equipmentForDriver(driverId).map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
-  equipmentSelect.innerHTML = options || `<option value="">No matching equipment for driver</option>`;
-  const allowedIds = equipmentForDriver(driverId).map((item) => item.id);
-  [...equipmentSelect.options].forEach((option) => {
-    option.selected = currentEquipmentIds.includes(option.value) && allowedIds.includes(option.value);
-  });
+  const currentEquipmentIds = checkedEquipmentIds();
+  const driverEquipment = equipmentForDriver(driverId);
+  equipmentList.innerHTML = driverEquipment.length
+    ? driverEquipment.map((item) => `
+      <label class="equipment-choice">
+        <input type="checkbox" name="equipmentIds" value="${item.id}" ${currentEquipmentIds.includes(item.id) ? "checked" : ""} />
+        <span><strong>${item.name}</strong><small>${item.type} | ${item.status}</small></span>
+      </label>
+    `).join("")
+    : `<div class="empty-mini">No matching equipment for driver</div>`;
+}
+
+function checkedEquipmentIds() {
+  return [...document.querySelectorAll("input[name='equipmentIds']:checked")].map((input) => input.value);
 }
 
 function uniqueValues(values) {
