@@ -115,17 +115,18 @@
                 <label>Sales person<input id="salesPerson" name="salesPerson" required placeholder="Sales person name" /></label>
                 <label>Ordered By<input id="orderedBy" name="orderedBy" required placeholder="Person who ordered the job" /></label>
               </div>
+              <label>AFV/PO #<input id="afvPoNumber" name="afvPoNumber" placeholder="Optional AFV or PO number" /></label>
               <div class="form-grid two">
                 <label>Pickup<input id="pickupLocation" name="pickup" required placeholder="Pickup address, yard, or lease" /></label>
                 <label>Drop off<input id="dropoffLocation" name="dropoff" required placeholder="Drop off address, yard, or lease" /></label>
               </div>
               <div class="form-grid two">
-                <label>Service type<select id="serviceType" name="serviceType" required><option>Crane lift</option><option>Trucking</option><option>Rig move</option><option>Haul off</option><option>Hot shot</option></select></label>
+                <label>Service type<input id="serviceType" name="serviceType" required placeholder="Type service needed" /></label>
                 <label>Priority<select id="priority" name="priority" required><option>Standard</option><option>High</option><option>Emergency</option></select></label>
               </div>
               <div class="form-grid two">
                 <label>Driver<select id="driver" name="driverId" required></select></label>
-                <label>Equipment<select id="equipment" name="equipmentId" required></select></label>
+                <label>Equipment<select id="equipment" name="equipmentIds" required multiple size="4"></select></label>
               </div>
               <div class="form-grid two">
                 <label>Start time<input id="startTime" name="startTime" required type="time" /></label>
@@ -174,6 +175,10 @@
                 <div><p class="eyebrow">Customer approval</p><h2>Signature and notes</h2></div>
               </div>
               <label>Ticket<select id="signatureTicketSelect" required></select></label>
+              <div class="form-grid two">
+                <label>AFV/PO #<input id="driverAfvPoNumber" placeholder="Optional AFV or PO number" /></label>
+                <label>Exposure hours<input id="exposureHours" min="0" required step="0.25" type="number" placeholder="0" /></label>
+              </div>
               <label>Driver completion note<textarea id="driverNote" required rows="3" placeholder="Delays, extra work, load condition, customer notes"></textarea></label>
               <label>Photo or document attachment<input id="driverAttachment" type="file" multiple /></label>
               <label>Customer name<input id="signerName" required placeholder="Printed name" /></label>

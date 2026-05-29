@@ -118,6 +118,9 @@ function normalizeState(data) {
     attachments: [],
     driverAttachments: [],
     driverNotes: "",
+    afvPoNumber: "",
+    exposureHours: "",
+    equipmentIds: ticket.equipmentId ? [ticket.equipmentId] : [],
     customerSignature: "",
     signerName: "",
     actualStart: "",
@@ -200,10 +203,12 @@ function mapTicket(row) {
     customerId: row.customer_id,
     driverId: row.driver_id,
     equipmentId: row.equipment_id,
+    equipmentIds: row.equipment_ids || (row.equipment_id ? [row.equipment_id] : []),
     jobDate: row.job_date,
     site: row.job_site,
     salesPerson: row.sales_person || "",
     orderedBy: row.ordered_by || "",
+    afvPoNumber: row.afv_po_number || "",
     serviceType: row.service_type,
     priority: row.priority,
     startTime: row.scheduled_start?.slice(0, 5) || "",
@@ -218,6 +223,7 @@ function mapTicket(row) {
     actualStart: row.actual_start?.slice(0, 5) || "",
     actualEnd: row.actual_end?.slice(0, 5) || "",
     driverNotes: row.driver_notes || "",
+    exposureHours: row.exposure_hours === null || row.exposure_hours === undefined ? "" : Number(row.exposure_hours),
     signerName: row.signer_name || "",
     customerSignature: row.customer_signature_path || "",
     completedAt: row.completed_at || "",
@@ -234,10 +240,12 @@ function ticketToSupabase(ticket) {
     customer_id: ticket.customerId,
     driver_id: ticket.driverId,
     equipment_id: ticket.equipmentId,
+    equipment_ids: equipmentIdsForTicket(ticket),
     job_date: ticket.jobDate,
     job_site: ticket.site,
     sales_person: ticket.salesPerson,
     ordered_by: ticket.orderedBy,
+    afv_po_number: ticket.afvPoNumber || "",
     service_type: ticket.serviceType,
     priority: ticket.priority,
     scheduled_start: ticket.startTime,
@@ -248,6 +256,7 @@ function ticketToSupabase(ticket) {
     minimum_charge: ticket.minimum,
     overtime_hours: ticket.overtimeHours,
     work_instructions: ticket.notes,
+    exposure_hours: ticket.exposureHours === "" || ticket.exposureHours === undefined ? null : Number(ticket.exposureHours),
     status: ticket.status,
   };
 }
@@ -447,7 +456,6 @@ function setCompletionSaving(isSaving) {
 async function sendWorkTicketSms(ticket) {
   if (!supabaseSession?.access_token) return { sent: false, error: "SMS skipped because the user is not signed in." };
   const driver = findDriver(ticket.driverId);
-  const equipment = findEquipment(ticket.equipmentId);
   const response = await fetch("/api/send-ticket-sms", {
     method: "POST",
     headers: {
@@ -459,7 +467,7 @@ async function sendWorkTicketSms(ticket) {
       customerName: customerName(ticket.customerId),
       driverName: driver?.name || "",
       driverPhone: driver?.phone || "",
-      equipmentName: equipment ? `${equipment.name} (${equipment.type})` : "",
+      equipmentName: equipmentNames(ticket) || "",
       jobDate: ticket.jobDate,
       startTime: ticket.startTime,
       serviceType: ticket.serviceType,
@@ -755,15 +763,30 @@ function equipmentForDriver(driverId) {
   return available.filter((item) => allowedTypes.includes(item.type));
 }
 
+function equipmentIdsForTicket(ticket) {
+  return uniqueValues([...(ticket.equipmentIds || []), ticket.equipmentId]);
+}
+
+function equipmentNames(ticket) {
+  return equipmentIdsForTicket(ticket)
+    .map((id) => findEquipment(id))
+    .filter(Boolean)
+    .map((item) => `${item.name} (${item.type})`)
+    .join(", ");
+}
+
 function renderEquipmentOptionsForDriver() {
   const equipmentSelect = document.querySelector("#equipment");
   const driverSelect = document.querySelector("#driver");
   if (!equipmentSelect || !driverSelect) return;
   const driverId = driverSelect.value;
-  const currentEquipmentId = equipmentSelect.value;
+  const currentEquipmentIds = selectedOptions(equipmentSelect);
   const options = equipmentForDriver(driverId).map((item) => `<option value="${item.id}">${item.name} - ${item.type} (${item.status})</option>`).join("");
   equipmentSelect.innerHTML = options || `<option value="">No matching equipment for driver</option>`;
-  if (equipmentForDriver(driverId).some((item) => item.id === currentEquipmentId)) equipmentSelect.value = currentEquipmentId;
+  const allowedIds = equipmentForDriver(driverId).map((item) => item.id);
+  [...equipmentSelect.options].forEach((option) => {
+    option.selected = currentEquipmentIds.includes(option.value) && allowedIds.includes(option.value);
+  });
 }
 
 function uniqueValues(values) {
@@ -868,7 +891,7 @@ function missingDispatchFields(data) {
     serviceType: "Service type",
     priority: "Priority",
     driverId: "Driver",
-    equipmentId: "Equipment",
+    equipmentIds: "Equipment",
     startTime: "Start time",
     hours: "Estimated hours",
     mileage: "Mileage",
@@ -877,7 +900,7 @@ function missingDispatchFields(data) {
   };
 
   return Object.entries(labels).filter(([field]) => {
-    const value = String(data.get(field) ?? "").trim();
+    const value = field === "equipmentIds" ? data.getAll(field).join("") : String(data.get(field) ?? "").trim();
     if (!value) return true;
     if (["hours", "mileage", "fuel"].includes(field)) {
       const number = Number(value);
@@ -961,6 +984,7 @@ function renderSelects() {
   if (driverQueueSelect && visibleDrivers.some((driver) => driver.id === activeDriverId)) driverQueueSelect.value = activeDriverId;
   if (driverQueueSelect && state.role === "driver" && currentDriver()) driverQueueSelect.value = currentDriver().id;
   if (signatureTicketSelect && state.tickets.some((ticket) => ticket.id === activeSignatureTicket)) signatureTicketSelect.value = activeSignatureTicket;
+  populateCompletionFields();
 }
 
 function renderStats() {
@@ -1019,16 +1043,17 @@ function openTicketQueue(bucket) {
 
 function ticketDetails(ticket) {
   const driver = findDriver(ticket.driverId);
-  const equipment = findEquipment(ticket.equipmentId);
   return [
     ["Date", displayDate(ticket.jobDate)],
     ["Service", ticket.serviceType],
     ["Driver", driver?.name || "Unassigned"],
-    ["Equipment", equipment ? `${equipment.name} (${equipment.type})` : "Unassigned"],
+    ["Equipment", equipmentNames(ticket) || "Unassigned"],
     ["Scheduled", ticket.startTime || "TBD"],
     ["Actual", `${ticket.actualStart || "--"} to ${ticket.actualEnd || "--"}`],
     ["Amount", formatAmount(ticket)],
     ["Site", ticket.site],
+    ["AFV/PO #", ticket.afvPoNumber || "Not entered"],
+    ["Exposure hours", ticket.exposureHours === "" || ticket.exposureHours === undefined ? "Not entered" : ticket.exposureHours],
     ["Sales person", ticket.salesPerson || "Not entered"],
     ["Ordered By", ticket.orderedBy || "Not entered"],
     ["Priority", ticket.priority],
@@ -1114,6 +1139,15 @@ function renderDriverQueue() {
   tickets.forEach((ticket) => list.append(buildTicketCard(ticket, "driver")));
 }
 
+function populateCompletionFields() {
+  const ticketId = document.querySelector("#signatureTicketSelect")?.value;
+  const ticket = state.tickets.find((item) => item.id === ticketId);
+  const afvPoField = document.querySelector("#driverAfvPoNumber");
+  const exposureField = document.querySelector("#exposureHours");
+  if (afvPoField) afvPoField.value = ticket?.afvPoNumber || "";
+  if (exposureField) exposureField.value = ticket?.exposureHours === "" || ticket?.exposureHours === undefined ? "" : ticket.exposureHours;
+}
+
 function focusDriverTickets(mode) {
   const select = document.querySelector("#driverQueueSelect");
   const driverId = state.role === "driver" ? currentDriver()?.id : select.value || state.drivers[0]?.id;
@@ -1197,7 +1231,7 @@ function renderOperations() {
     <div class="map-pin">
       <strong>${ticket.site}</strong>
       <span>${ticket.id} | ${customerName(ticket.customerId)}</span>
-      <span>${findDriver(ticket.driverId)?.name || "Unassigned driver"} | Unit: ${findEquipment(ticket.equipmentId)?.name || "No unit assigned"}</span>
+      <span>${findDriver(ticket.driverId)?.name || "Unassigned driver"} | Unit: ${equipmentNames(ticket) || "No unit assigned"}</span>
       <span>${ticket.status}</span>
     </div>
   `).join("") || `<div class="empty-state">No job sites to map.</div>`;
@@ -1427,7 +1461,7 @@ async function updateTicket(id, status) {
   });
   const ticket = state.tickets.find((item) => item.id === id);
   notify(`${id} moved to ${status}.`, invoiceWorkflowStatuses.includes(status) || status === "Canceled" ? "invoicing" : "dispatcher");
-  if (ticket) updateEquipmentFromTickets(ticket.equipmentId);
+  if (ticket) updateEquipmentFromTickets(ticket);
   renderAll();
 }
 
@@ -1446,9 +1480,13 @@ function canCancelTicket(ticket) {
   return Boolean(ticket) && !["Invoiced", "Canceled"].includes(ticket.status) && state.role !== "driver";
 }
 
-function updateEquipmentFromTickets(equipmentId) {
-  const hasActive = state.tickets.some((ticket) => ticket.equipmentId === equipmentId && ["Sent", "Accepted", "In Progress"].includes(ticket.status));
-  state.equipment = state.equipment.map((item) => item.id === equipmentId ? { ...item, status: hasActive ? "Assigned" : item.status === "Assigned" ? "Available" : item.status } : item);
+function updateEquipmentFromTickets(ticketOrEquipmentId) {
+  const changedIds = typeof ticketOrEquipmentId === "string" ? [ticketOrEquipmentId] : equipmentIdsForTicket(ticketOrEquipmentId);
+  state.equipment = state.equipment.map((item) => {
+    if (!changedIds.includes(item.id)) return item;
+    const hasActive = state.tickets.some((ticket) => equipmentIdsForTicket(ticket).includes(item.id) && ["Sent", "Accepted", "In Progress"].includes(ticket.status));
+    return { ...item, status: hasActive ? "Assigned" : item.status === "Assigned" ? "Available" : item.status };
+  });
 }
 
 function removeDriver(id) {
@@ -1605,7 +1643,7 @@ function downloadText(filename, text, type = "text/plain") {
 }
 
 function exportCsv() {
-  const rows = [["Ticket", "Customer", "Date", "Service", "Sales Person", "Ordered By", "Driver", "Equipment", "Status", "Amount", "Signed", "Files"]];
+  const rows = [["Ticket", "Customer", "Date", "Service", "AFV/PO #", "Sales Person", "Ordered By", "Driver", "Equipment", "Status", "Amount", "Signed", "Exposure Hours", "Files"]];
   const readyTickets = state.tickets.filter((ticket) => ticket.status === "Final Approved");
   if (!readyTickets.length) {
     alert("There are no final approved tickets ready to export for invoicing.");
@@ -1616,13 +1654,15 @@ function exportCsv() {
     customerName(ticket.customerId),
     ticket.jobDate,
     ticket.serviceType,
+    ticket.afvPoNumber || "",
     ticket.salesPerson || "",
     ticket.orderedBy || "",
     findDriver(ticket.driverId)?.name || "",
-    findEquipment(ticket.equipmentId)?.name || "",
+    equipmentNames(ticket),
     ticket.status,
     ticketTotal(ticket),
     ticket.signerName || "",
+    ticket.exposureHours === "" || ticket.exposureHours === undefined ? "" : ticket.exposureHours,
     [...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join("; "),
   ]));
   downloadText("prz-ready-for-invoicing.csv", rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"), "text/csv");
@@ -1631,7 +1671,7 @@ function exportCsv() {
 function exportPacket() {
   const packet = state.tickets
     .filter((ticket) => ticket.status === "Final Approved")
-    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nSales person: ${ticket.salesPerson || "Not entered"}\nOrdered By: ${ticket.orderedBy || "Not entered"}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
+    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nAFV/PO #: ${ticket.afvPoNumber || "Not entered"}\nSales person: ${ticket.salesPerson || "Not entered"}\nOrdered By: ${ticket.orderedBy || "Not entered"}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nEquipment: ${equipmentNames(ticket) || "Unassigned"}\nExposure hours: ${ticket.exposureHours === "" || ticket.exposureHours === undefined ? "Not entered" : ticket.exposureHours}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
     .join("\n\n---\n\n");
   downloadText("prz-invoice-packet.txt", packet || "No final approved tickets ready for invoicing.");
 }
@@ -1647,7 +1687,7 @@ function seedSampleDay() {
     {
       id: "PRZ-1048", customerId: "cus-1", site: "County Road 118 lease pad", serviceType: "Crane lift", priority: "High",
       salesPerson: "Amanda Tijerina", orderedBy: "Luis Moreno",
-      driverId: "drv-1", equipmentId: "eq-1", jobDate: todayISO(), startTime: "07:30", hours: 6, rate: 225, mileage: 18,
+      driverId: "drv-1", equipmentId: "eq-1", equipmentIds: ["eq-1"], afvPoNumber: "PO-1048", jobDate: todayISO(), startTime: "07:30", hours: 6, rate: 225, mileage: 18,
       fuel: 95, minimum: 1000, overtimeHours: 0, attachments: ["lift-plan.pdf"], driverAttachments: ["compressor-set-photo.jpg"],
       notes: "Set compressor skid. Call site contact before entering the gate.", status: "In Progress", actualStart: "07:42",
       createdAt: new Date(Date.now() - 7200000).toISOString(),
@@ -1655,14 +1695,14 @@ function seedSampleDay() {
     {
       id: "PRZ-1049", customerId: "cus-2", site: "South yard to Hobbs location", serviceType: "Trucking", priority: "Standard",
       salesPerson: "Amanda Tijerina", orderedBy: "Yard manager",
-      driverId: "drv-2", equipmentId: "eq-2", jobDate: todayISO(), startTime: "10:00", hours: 4, rate: 175, mileage: 42,
+      driverId: "drv-2", equipmentId: "eq-2", equipmentIds: ["eq-2"], afvPoNumber: "", jobDate: todayISO(), startTime: "10:00", hours: 4, rate: 175, mileage: 42,
       fuel: 60, minimum: 650, overtimeHours: 0, attachments: ["bill-of-lading.pdf"], driverAttachments: [], notes: "Move pipe racks. Yard manager will load.",
       status: "Sent", createdAt: new Date(Date.now() - 3600000).toISOString(),
     },
     {
       id: "PRZ-1050", customerId: "cus-1", site: "PRZ yard", serviceType: "Rig move", priority: "Emergency",
       salesPerson: "Amanda Tijerina", orderedBy: "Rig supervisor",
-      driverId: "drv-3", equipmentId: "eq-3", jobDate: todayISO(), startTime: "13:00", hours: 8, rate: 250, mileage: 22,
+      driverId: "drv-3", equipmentId: "eq-3", equipmentIds: ["eq-3"], afvPoNumber: "AFV-1050", jobDate: todayISO(), startTime: "13:00", hours: 8, rate: 250, mileage: 22,
       fuel: 125, minimum: 1500, overtimeHours: 1, attachments: ["route-permit.pdf"], driverAttachments: ["signed-ticket.jpg"],
       notes: "Confirm route before dispatch. Oversize load escort requested.", status: "Completed", actualStart: "13:05", actualEnd: "18:40",
       signerName: "Luis Moreno", customerSignature: "typed approval", completedAt: new Date().toISOString(),
@@ -1688,10 +1728,12 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     site: routeText(String(data.get("pickup") || ""), String(data.get("dropoff") || "")),
     salesPerson: data.get("salesPerson").trim(),
     orderedBy: data.get("orderedBy").trim(),
-    serviceType: data.get("serviceType"),
+    afvPoNumber: String(data.get("afvPoNumber") || "").trim(),
+    serviceType: data.get("serviceType").trim(),
     priority: data.get("priority"),
     driverId: data.get("driverId"),
-    equipmentId: data.get("equipmentId"),
+    equipmentId: data.getAll("equipmentIds")[0],
+    equipmentIds: data.getAll("equipmentIds"),
     jobDate: data.get("jobDate"),
     startTime: data.get("startTime"),
     hours: Number(data.get("hours")),
@@ -1733,7 +1775,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   }
   state.tickets.push(ticket);
   state.nextTicket += 1;
-  updateEquipmentFromTickets(ticket.equipmentId);
+  updateEquipmentFromTickets(ticket);
   notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, ticket.driverId || "driver");
   event.currentTarget.reset();
   document.querySelector("#jobDate").value = todayISO();
@@ -1879,11 +1921,14 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
   if (completionSaveInProgress) return;
   const ticketId = document.querySelector("#signatureTicketSelect").value;
   const noteField = document.querySelector("#driverNote");
+  const afvPoField = document.querySelector("#driverAfvPoNumber");
+  const exposureField = document.querySelector("#exposureHours");
   const signerField = document.querySelector("#signerName");
   const attachmentInput = document.querySelector("#driverAttachment");
   const canvas = document.querySelector("#signatureCanvas");
-  if (!ticketId || !noteField.value.trim() || !signerField.value.trim()) {
-    alert("Complete the ticket, driver note, and customer name before saving the packet.");
+  const exposureHours = Number(exposureField.value);
+  if (!ticketId || !noteField.value.trim() || !signerField.value.trim() || exposureField.value === "" || Number.isNaN(exposureHours) || exposureHours < 0) {
+    alert("Complete the ticket, exposure hours, driver note, and customer name before saving the packet.");
     return;
   }
   if (isSignatureBlank(canvas)) {
@@ -1915,6 +1960,8 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
       const { error } = await withSaveTimeout(
         supabaseClient.from("work_tickets").update({
           driver_notes: noteField.value.trim(),
+          afv_po_number: afvPoField.value.trim(),
+          exposure_hours: exposureHours,
           signer_name: signerField.value.trim(),
           customer_signature_path: signaturePath,
         }).eq("id", currentTicket.dbId),
@@ -1924,6 +1971,8 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
       if (error) throw new Error(`ticket completion update failed: ${error.message}`);
       notify(`${ticketId} completion packet updated.`, "invoicing");
       noteField.value = "";
+      afvPoField.value = "";
+      exposureField.value = "";
       signerField.value = "";
       attachmentInput.value = "";
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -1944,12 +1993,16 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
   state.tickets = state.tickets.map((ticket) => ticket.id === ticketId ? {
     ...ticket,
     driverNotes: noteField.value.trim(),
+    afvPoNumber: afvPoField.value.trim(),
+    exposureHours,
     driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(attachmentInput)],
     signerName: signerField.value.trim(),
     customerSignature: canvas.toDataURL("image/png"),
   } : ticket);
   notify(`${ticketId} completion packet updated.`, "invoicing");
   noteField.value = "";
+  afvPoField.value = "";
+  exposureField.value = "";
   signerField.value = "";
   attachmentInput.value = "";
   canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -1960,6 +2013,7 @@ document.querySelectorAll(".nav-tab").forEach((button) => button.addEventListene
 document.querySelectorAll("[data-ticket-bucket]").forEach((button) => button.addEventListener("click", () => openTicketQueue(button.dataset.ticketBucket)));
 document.querySelector("#statusFilter").addEventListener("change", renderTickets);
 document.querySelector("#driverQueueSelect").addEventListener("change", renderDriverQueue);
+document.querySelector("#signatureTicketSelect").addEventListener("change", populateCompletionFields);
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
 document.querySelector("#addDriverUnit").addEventListener("click", addPendingDriverUnit);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
