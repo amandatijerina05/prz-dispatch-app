@@ -864,6 +864,16 @@ button:focus-visible {
   font-size: 0.82rem;
 }
 
+.maintenance-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.maintenance-proof-list {
+  margin-top: 8px;
+}
+
 .signature-panel canvas {
   display: block;
   width: 100%;

@@ -60,6 +60,7 @@ When signed in as **Driver**, the interface switches to a driver-focused phone l
 - `supabase-equipment-driver-types.sql` adds driver equipment-type assignments and PRZ equipment models.
 - `supabase-driver-notification-policy.sql` restricts driver notification reads to their own messages.
 - `supabase-ticket-order-fields.sql` adds Sales Person and Ordered By fields to work tickets.
+- `supabase-maintenance-proof-files.sql` adds maintenance proof photo/document storage.
 
 ## Production Environment Variables
 

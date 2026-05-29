@@ -175,6 +175,7 @@ function mapMaintenance(row) {
     task: row.task,
     due: row.due_date,
     status: row.status,
+    proofFiles: row.proof_files || [],
   };
 }
 
@@ -352,6 +353,59 @@ async function uploadTicketFiles(ticketDbId, ticketNumber, input, bucket, fileTy
     uploaded.push(preparedFile.fileName);
   }
   return uploaded;
+}
+
+async function uploadMaintenanceProofFiles(recordId, input, options = {}) {
+  const files = [...input.files];
+  if (!files.length) return [];
+
+  const uploaded = [];
+  for (const file of files) {
+    const preparedFile = await prepareFileForUpload(file, options.optimizeImages);
+    const safeName = preparedFile.storageName.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `${recordId}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadError } = await supabaseClient.storage.from("maintenance-attachments").upload(path, preparedFile.body, {
+      contentType: preparedFile.contentType || "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) throw new Error(`Could not upload ${preparedFile.fileName}: ${uploadError.message}`);
+    uploaded.push(preparedFile.fileName);
+  }
+  return uploaded;
+}
+
+async function addMaintenanceProof(recordId, input, button) {
+  if (!supabaseSession) {
+    const files = fileNames(input);
+    if (!files.length) return alert("Choose at least one proof photo or document first.");
+    state.maintenance = state.maintenance.map((item) =>
+      item.id === recordId ? { ...item, proofFiles: uniqueNames([...(item.proofFiles || []), ...files]) } : item,
+    );
+    input.value = "";
+    renderAll();
+    return;
+  }
+
+  const record = state.maintenance.find((item) => item.id === recordId);
+  if (!record) return;
+  if (!input.files.length) return alert("Choose at least one proof photo or document first.");
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Uploading...";
+  try {
+    const uploaded = await uploadMaintenanceProofFiles(recordId, input, { optimizeImages: true });
+    const proofFiles = uniqueNames([...(record.proofFiles || []), ...uploaded]);
+    const { error } = await supabaseClient.from("maintenance_records").update({ proof_files: proofFiles }).eq("id", recordId);
+    if (error) throw error;
+    input.value = "";
+    await loadSupabaseReferenceData();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 async function uploadSignature(ticketDbId, ticketNumber, canvas) {
@@ -1116,10 +1170,29 @@ function renderMaintenance() {
 
   document.querySelector("#maintenanceList").innerHTML = state.maintenance.map((item) => `
     <div class="admin-row">
-      <div><strong>${item.task}</strong><span>${findEquipment(item.equipmentId)?.name || "Equipment"} | ${displayDate(item.due)} | ${item.status}</span></div>
-      <button class="small-button complete-maintenance" data-id="${item.id}" type="button">Complete</button>
+      <div>
+        <strong>${item.task}</strong>
+        <span>${findEquipment(item.equipmentId)?.name || "Equipment"} | ${displayDate(item.due)} | ${item.status}</span>
+        <div class="attachment-list maintenance-proof-list">${(item.proofFiles || []).length ? item.proofFiles.map((name) => `<span class="file-chip">${name}</span>`).join("") : `<span class="muted-small">No proof attached yet</span>`}</div>
+      </div>
+      <div class="maintenance-actions">
+        <input class="maintenance-proof-input" data-id="${item.id}" type="file" multiple />
+        <button class="small-button add-maintenance-proof" data-id="${item.id}" type="button">Add proof</button>
+        <button class="small-button complete-maintenance" data-id="${item.id}" type="button">Complete</button>
+      </div>
     </div>`).join("") || `<div class="empty-state">No maintenance items yet.</div>`;
+  document.querySelectorAll(".add-maintenance-proof").forEach((button) => button.addEventListener("click", () => {
+    const input = document.querySelector(`.maintenance-proof-input[data-id="${button.dataset.id}"]`);
+    addMaintenanceProof(button.dataset.id, input, button);
+  }));
   document.querySelectorAll(".complete-maintenance").forEach((button) => button.addEventListener("click", () => {
+    if (supabaseSession) {
+      supabaseClient.from("maintenance_records").update({ status: "Complete", completed_at: new Date().toISOString() }).eq("id", button.dataset.id).then(async ({ error }) => {
+        if (error) return alert(error.message);
+        await loadSupabaseReferenceData();
+      });
+      return;
+    }
     state.maintenance = state.maintenance.map((item) => item.id === button.dataset.id ? { ...item, status: "Complete" } : item);
     renderAll();
   }));
@@ -1693,6 +1766,7 @@ document.querySelector("#customerForm").addEventListener("submit", (event) => {
 document.querySelector("#maintenanceForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  const proofInput = document.querySelector("#maintenanceProofFiles");
   const maintenance = {
     equipment_id: document.querySelector("#maintenanceEquipment").value,
     due_date: document.querySelector("#maintenanceDue").value,
@@ -1700,15 +1774,26 @@ document.querySelector("#maintenanceForm").addEventListener("submit", (event) =>
     status: document.querySelector("#maintenanceStatus").value,
   };
   if (supabaseSession) {
-    supabaseClient.from("maintenance_records").insert(maintenance).then(async ({ error }) => {
+    supabaseClient.from("maintenance_records").insert(maintenance).select("*").single().then(async ({ data, error }) => {
       if (error) return alert(error.message);
+      try {
+        if (proofInput.files.length) {
+          const uploaded = await uploadMaintenanceProofFiles(data.id, proofInput, { optimizeImages: true });
+          const { error: updateError } = await supabaseClient.from("maintenance_records").update({ proof_files: uploaded }).eq("id", data.id);
+          if (updateError) throw updateError;
+        }
+      } catch (uploadError) {
+        alert(uploadError.message);
+      }
       form.reset();
+      document.querySelector("#maintenanceDue").value = todayISO();
       await loadSupabaseReferenceData();
     });
     return;
   }
-  state.maintenance.push({ id: uid("mnt"), equipmentId: maintenance.equipment_id, due: maintenance.due_date, task: maintenance.task, status: maintenance.status });
+  state.maintenance.push({ id: uid("mnt"), equipmentId: maintenance.equipment_id, due: maintenance.due_date, task: maintenance.task, status: maintenance.status, proofFiles: fileNames(proofInput) });
   event.currentTarget.reset();
+  document.querySelector("#maintenanceDue").value = todayISO();
   renderAll();
 });
 

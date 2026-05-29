@@ -103,6 +103,7 @@ create table if not exists maintenance_records (
   task text not null,
   due_date date not null,
   status text not null default 'Scheduled' check (status in ('Scheduled', 'Due Soon', 'Overdue', 'Complete')),
+  proof_files text[] not null default '{}',
   completed_at timestamptz,
   created_at timestamptz not null default now()
 );
