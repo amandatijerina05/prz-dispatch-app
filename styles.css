@@ -371,9 +371,19 @@ body[data-active-view="dispatch"] .dispatcher-hidden-metric {
   display: none;
 }
 
+.driver-assigned-stats {
+  display: none;
+  margin-bottom: 18px;
+}
+
 body.maintenance-mode .stats-grid,
 body.driver-mode .stats-grid {
   display: none;
+}
+
+body.driver-mode .driver-assigned-stats {
+  display: grid;
+  grid-template-columns: 1fr;
 }
 
 body.driver-mode .nav-tab:not([data-view="drivers"]):not([data-view="notifications"]),

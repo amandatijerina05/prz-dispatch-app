@@ -971,6 +971,7 @@ function renderStats() {
   document.querySelector("#approverCount").textContent = buckets.approver.tickets.length;
   document.querySelector("#invoiceCount").textContent = buckets.ready.tickets.length;
   document.querySelector("#revenueCount").textContent = moneyFormatter.format(revenue);
+  document.querySelector("#driverAssignedCount").textContent = driverAssignedTickets().length;
   document.querySelector("#nextTicketNumber").textContent = ticketNumber();
 }
 
@@ -1001,6 +1002,12 @@ function ticketBuckets() {
 
 function canOpenTicketQueues() {
   return ["admin", "invoicing"].includes(state.role);
+}
+
+function driverAssignedTickets() {
+  const driver = currentDriver();
+  if (!driver) return [];
+  return state.tickets.filter((ticket) => ticket.driverId === driver.id && !["Invoiced", "Canceled"].includes(ticket.status));
 }
 
 function openTicketQueue(bucket) {
@@ -1087,11 +1094,13 @@ function renderDriverQueue() {
   const driverId = state.role === "driver" ? lockedDriver?.id : select.value || state.drivers[0]?.id;
   if (driverId && select.value !== driverId) select.value = driverId;
   select.disabled = state.role === "driver";
-  const tickets = state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status)).sort((a, b) => a.jobDate.localeCompare(b.jobDate));
+  const tickets = (state.role === "driver" ? driverAssignedTickets() : state.tickets.filter((ticket) => ticket.driverId === driverId && !["Invoiced", "Canceled"].includes(ticket.status))).sort((a, b) => a.jobDate.localeCompare(b.jobDate));
   const activeCount = tickets.filter((ticket) => ticket.status !== "Completed").length;
   const completedCount = tickets.filter((ticket) => ticket.status === "Completed").length;
   const driver = findDriver(driverId);
-  document.querySelector("#driverSummary").innerHTML = `
+  document.querySelector("#driverSummary").innerHTML = state.role === "driver" ? `
+    <div class="summary-box"><span>Assigned Tickets</span><strong>${tickets.length}</strong></div>
+  ` : `
     <div class="summary-box"><span>Driver</span><strong>${driver?.name || "No driver selected"}</strong></div>
     <div class="summary-box"><span>Phone</span><strong>${driver?.phone || "--"}</strong></div>
     <div class="summary-box"><span>Tickets</span><strong>${activeCount} active / ${completedCount} completed</strong></div>
