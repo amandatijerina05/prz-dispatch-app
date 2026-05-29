@@ -197,6 +197,22 @@
                 <label>AFV/PO #<input id="driverAfvPoNumber" placeholder="Optional AFV or PO number" /></label>
                 <label>Exposure hours<input id="exposureHours" min="0" required step="0.25" type="number" placeholder="0" /></label>
               </div>
+              <section class="line-items-panel">
+                <div class="line-items-heading">
+                  <div>
+                    <p class="eyebrow">Ticket charges</p>
+                    <h3>Line items</h3>
+                  </div>
+                  <button class="small-button" id="addDriverLineItem" type="button">Add line</button>
+                </div>
+                <div class="line-items-grid" aria-label="Driver line items">
+                  <div class="line-items-header">
+                    <span>Qty</span><span>Line item</span><span>Time in</span><span>Time out</span><span>Rate</span><span>Charges</span><span></span>
+                  </div>
+                  <div id="driverLineItemsList"></div>
+                </div>
+                <div class="line-items-total"><span>Total charges</span><strong id="driverLineItemsTotal">$0</strong></div>
+              </section>
               <label>Driver completion note<textarea id="driverNote" required rows="3" placeholder="Delays, extra work, load condition, customer notes"></textarea></label>
               <label>Photo or document attachment<input id="driverAttachment" type="file" multiple /></label>
               <label>Customer name<input id="signerName" required placeholder="Printed name" /></label>

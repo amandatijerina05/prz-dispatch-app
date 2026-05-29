@@ -913,12 +913,13 @@ function calculateLineCharge(row) {
   return (qty * rate * basis).toFixed(2);
 }
 
-function updateLineItemTotal() {
-  const total = lineItemsTotal(collectLineItems({ allowIncomplete: true }).lineItems);
-  document.querySelector("#lineItemsTotal").textContent = moneyFormatter.format(total);
+function updateLineItemTotal(listSelector = "#lineItemsList", totalSelector = "#lineItemsTotal") {
+  const total = lineItemsTotal(collectLineItems({ allowIncomplete: true, listSelector }).lineItems);
+  const totalElement = document.querySelector(totalSelector);
+  if (totalElement) totalElement.textContent = moneyFormatter.format(total);
 }
 
-function createLineItemRow(item = {}) {
+function createLineItemRow(item = {}, listSelector = "#lineItemsList", totalSelector = "#lineItemsTotal") {
   const row = document.createElement("div");
   row.className = "line-item-row";
   row.innerHTML = `
@@ -936,30 +937,36 @@ function createLineItemRow(item = {}) {
       if (!chargeInput.dataset.manual) chargeInput.value = calculateLineCharge(row);
     }
     if (input.classList.contains("line-charge")) input.dataset.manual = "true";
-    updateLineItemTotal();
+    updateLineItemTotal(listSelector, totalSelector);
   }));
   row.querySelector(".remove-line-item").addEventListener("click", () => {
     row.remove();
-    if (!document.querySelectorAll(".line-item-row").length) addLineItemRow();
-    updateLineItemTotal();
+    if (!document.querySelectorAll(`${listSelector} .line-item-row`).length) addLineItemRow({}, listSelector, totalSelector);
+    updateLineItemTotal(listSelector, totalSelector);
   });
   return row;
 }
 
-function addLineItemRow(item = {}) {
-  document.querySelector("#lineItemsList").append(createLineItemRow(item));
-  updateLineItemTotal();
+function addLineItemRow(item = {}, listSelector = "#lineItemsList", totalSelector = "#lineItemsTotal") {
+  document.querySelector(listSelector).append(createLineItemRow(item, listSelector, totalSelector));
+  updateLineItemTotal(listSelector, totalSelector);
 }
 
-function resetLineItems() {
-  document.querySelector("#lineItemsList").innerHTML = "";
-  addLineItemRow();
+function resetLineItems(lineItems = [], listSelector = "#lineItemsList", totalSelector = "#lineItemsTotal") {
+  const list = document.querySelector(listSelector);
+  if (!list) return;
+  list.innerHTML = "";
+  if (lineItems.length) {
+    lineItems.forEach((item) => addLineItemRow(item, listSelector, totalSelector));
+  } else {
+    addLineItemRow({}, listSelector, totalSelector);
+  }
 }
 
-function collectLineItems({ allowIncomplete = false } = {}) {
+function collectLineItems({ allowIncomplete = false, listSelector = "#lineItemsList" } = {}) {
   const lineItems = [];
   const errors = [];
-  document.querySelectorAll(".line-item-row").forEach((row, index) => {
+  document.querySelectorAll(`${listSelector} .line-item-row`).forEach((row, index) => {
     const quantity = row.querySelector(".line-qty").value.trim();
     const description = row.querySelector(".line-description").value.trim();
     const timeIn = row.querySelector(".line-time-in").value;
@@ -1258,6 +1265,7 @@ function populateCompletionFields() {
   const exposureField = document.querySelector("#exposureHours");
   if (afvPoField) afvPoField.value = ticket?.afvPoNumber || "";
   if (exposureField) exposureField.value = ticket?.exposureHours === "" || ticket?.exposureHours === undefined ? "" : ticket.exposureHours;
+  resetLineItems(ticket?.lineItems || [], "#driverLineItemsList", "#driverLineItemsTotal");
 }
 
 function focusDriverTickets(mode) {
@@ -2052,6 +2060,11 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
     alert("Complete the ticket, exposure hours, driver note, and customer name before saving the packet.");
     return;
   }
+  const { lineItems, errors: lineItemErrors } = collectLineItems({ listSelector: "#driverLineItemsList" });
+  if (lineItemErrors.length) {
+    alert(`Complete the line items before saving:\n\n${lineItemErrors.join("\n")}`);
+    return;
+  }
   if (isSignatureBlank(canvas)) {
     alert("Customer signature is required before saving the completion packet.");
     return;
@@ -2083,6 +2096,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
           driver_notes: noteField.value.trim(),
           afv_po_number: afvPoField.value.trim(),
           exposure_hours: exposureHours,
+          line_items: lineItems,
           signer_name: signerField.value.trim(),
           customer_signature_path: signaturePath,
         }).eq("id", currentTicket.dbId),
@@ -2094,6 +2108,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
       noteField.value = "";
       afvPoField.value = "";
       exposureField.value = "";
+      resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
       signerField.value = "";
       attachmentInput.value = "";
       canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -2116,6 +2131,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
     driverNotes: noteField.value.trim(),
     afvPoNumber: afvPoField.value.trim(),
     exposureHours,
+    lineItems,
     driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(attachmentInput)],
     signerName: signerField.value.trim(),
     customerSignature: canvas.toDataURL("image/png"),
@@ -2124,6 +2140,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
   noteField.value = "";
   afvPoField.value = "";
   exposureField.value = "";
+  resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
   signerField.value = "";
   attachmentInput.value = "";
   canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -2137,6 +2154,7 @@ document.querySelector("#driverQueueSelect").addEventListener("change", renderDr
 document.querySelector("#signatureTicketSelect").addEventListener("change", populateCompletionFields);
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
 document.querySelector("#addLineItem").addEventListener("click", () => addLineItemRow());
+document.querySelector("#addDriverLineItem").addEventListener("click", () => addLineItemRow({}, "#driverLineItemsList", "#driverLineItemsTotal"));
 document.querySelector("#addDriverUnit").addEventListener("click", addPendingDriverUnit);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
   if (supabaseProfile?.role) {
@@ -2231,5 +2249,6 @@ document.querySelector("#todayLabel").textContent = new Date().toLocaleDateStrin
 document.querySelector("#jobDate").value = todayISO();
 document.querySelector("#maintenanceDue").value = todayISO();
 resetLineItems();
+resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
 initSupabase();
 renderAll();
