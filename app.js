@@ -771,6 +771,10 @@ function ticketTotal(ticket) {
   return Math.max(total, Number(ticket.minimum || 0));
 }
 
+function routeText(pickup, dropoff) {
+  return `${pickup.trim()} -> ${dropoff.trim()}`;
+}
+
 function formatAmount(ticket) {
   return moneyFormatter.format(ticketTotal(ticket));
 }
@@ -797,24 +801,23 @@ function missingDispatchFields(data) {
   const labels = {
     customerId: "Customer",
     jobDate: "Job date",
-    site: "Job site",
+    pickup: "Pickup",
+    dropoff: "Drop off",
     serviceType: "Service type",
     priority: "Priority",
     driverId: "Driver",
     equipmentId: "Equipment",
     startTime: "Start time",
     hours: "Estimated hours",
-    rate: "Base rate",
     mileage: "Mileage",
     fuel: "Fuel surcharge",
-    minimum: "Minimum charge",
     notes: "Work instructions",
   };
 
   return Object.entries(labels).filter(([field]) => {
     const value = String(data.get(field) ?? "").trim();
     if (!value) return true;
-    if (["hours", "rate", "mileage", "fuel", "minimum"].includes(field)) {
+    if (["hours", "mileage", "fuel"].includes(field)) {
       const number = Number(value);
       return Number.isNaN(number) || number < 0 || (field === "hours" && number <= 0);
     }
@@ -1518,7 +1521,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   const ticket = {
     id: ticketNumber(),
     customerId: data.get("customerId"),
-    site: data.get("site").trim(),
+    site: routeText(String(data.get("pickup") || ""), String(data.get("dropoff") || "")),
     serviceType: data.get("serviceType"),
     priority: data.get("priority"),
     driverId: data.get("driverId"),
@@ -1526,10 +1529,10 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     jobDate: data.get("jobDate"),
     startTime: data.get("startTime"),
     hours: Number(data.get("hours")),
-    rate: Number(data.get("rate")),
+    rate: 0,
     mileage: Number(data.get("mileage")),
     fuel: Number(data.get("fuel")),
-    minimum: Number(data.get("minimum")),
+    minimum: 0,
     overtimeHours: 0,
     notes: data.get("notes").trim(),
     attachments: fileNames(document.querySelector("#ticketFiles")),

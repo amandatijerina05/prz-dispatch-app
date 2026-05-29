@@ -106,7 +106,10 @@
                 <label>Customer<select id="customerSelect" name="customerId" required></select></label>
                 <label>Job date<input id="jobDate" name="jobDate" required type="date" /></label>
               </div>
-              <label>Job site<input id="site" name="site" required placeholder="Address, yard, or lease location" /></label>
+              <div class="form-grid two">
+                <label>Pickup<input id="pickupLocation" name="pickup" required placeholder="Pickup address, yard, or lease" /></label>
+                <label>Drop off<input id="dropoffLocation" name="dropoff" required placeholder="Drop off address, yard, or lease" /></label>
+              </div>
               <div class="form-grid two">
                 <label>Service type<select id="serviceType" name="serviceType" required><option>Crane lift</option><option>Trucking</option><option>Rig move</option><option>Haul off</option><option>Hot shot</option></select></label>
                 <label>Priority<select id="priority" name="priority" required><option>Standard</option><option>High</option><option>Emergency</option></select></label>
@@ -115,15 +118,13 @@
                 <label>Driver<select id="driver" name="driverId" required></select></label>
                 <label>Equipment<select id="equipment" name="equipmentId" required></select></label>
               </div>
-              <div class="form-grid three">
+              <div class="form-grid two">
                 <label>Start time<input id="startTime" name="startTime" required type="time" /></label>
                 <label>Estimated hours<input id="hours" min="0.5" name="hours" required step="0.5" type="number" value="4" /></label>
-                <label>Base rate<input id="rate" min="0" name="rate" required step="25" type="number" value="175" /></label>
               </div>
-              <div class="form-grid three">
+              <div class="form-grid two">
                 <label>Mileage<input name="mileage" min="0" required step="1" type="number" value="0" /></label>
                 <label>Fuel surcharge<input name="fuel" min="0" required step="10" type="number" value="0" /></label>
-                <label>Minimum charge<input name="minimum" min="0" required step="25" type="number" value="0" /></label>
               </div>
               <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
               <label>Work instructions<textarea id="notes" name="notes" required rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
