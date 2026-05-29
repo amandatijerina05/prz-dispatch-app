@@ -118,6 +118,7 @@ function normalizeState(data) {
     attachments: [],
     driverAttachments: [],
     driverNotes: "",
+    lineItems: [],
     afvPoNumber: "",
     exposureHours: "",
     equipmentIds: ticket.equipmentId ? [ticket.equipmentId] : [],
@@ -218,6 +219,7 @@ function mapTicket(row) {
     fuel: Number(row.fuel_surcharge || 0),
     minimum: Number(row.minimum_charge || 0),
     overtimeHours: Number(row.overtime_hours || 0),
+    lineItems: row.line_items || [],
     notes: row.work_instructions,
     status: row.status,
     actualStart: row.actual_start?.slice(0, 5) || "",
@@ -255,6 +257,7 @@ function ticketToSupabase(ticket) {
     fuel_surcharge: ticket.fuel,
     minimum_charge: ticket.minimum,
     overtime_hours: ticket.overtimeHours,
+    line_items: ticket.lineItems || [],
     work_instructions: ticket.notes,
     exposure_hours: ticket.exposureHours === "" || ticket.exposureHours === undefined ? null : Number(ticket.exposureHours),
     status: ticket.status,
@@ -854,11 +857,17 @@ async function createEquipmentUnitsForDriver(units) {
 }
 
 function ticketTotal(ticket) {
+  const lineTotal = lineItemsTotal(ticket.lineItems || []);
+  if (lineTotal > 0) return lineTotal;
   const base = Number(ticket.hours || 0) * Number(ticket.rate || 0);
   const overtime = Number(ticket.overtimeHours || 0) * Number(ticket.rate || 0) * 1.5;
   const mileage = Number(ticket.mileage || 0) * 3;
   const total = base + overtime + mileage + Number(ticket.fuel || 0);
   return Math.max(total, Number(ticket.minimum || 0));
+}
+
+function lineItemsTotal(lineItems) {
+  return (lineItems || []).reduce((sum, item) => sum + Number(item.charge || 0), 0);
 }
 
 function routeText(pickup, dropoff) {
@@ -880,6 +889,100 @@ function notify(message, audience = "dispatcher") {
 
 function fileNames(input) {
   return [...input.files].map((file) => file.name);
+}
+
+function timeDifferenceHours(start, end) {
+  if (!start || !end) return 0;
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  if ([startHour, startMinute, endHour, endMinute].some(Number.isNaN)) return 0;
+  const startTotal = startHour * 60 + startMinute;
+  let endTotal = endHour * 60 + endMinute;
+  if (endTotal < startTotal) endTotal += 24 * 60;
+  return Math.max(0, (endTotal - startTotal) / 60);
+}
+
+function calculateLineCharge(row) {
+  const qty = Number(row.querySelector(".line-qty")?.value || 0);
+  const rate = Number(row.querySelector(".line-rate")?.value || 0);
+  const timeIn = row.querySelector(".line-time-in")?.value || "";
+  const timeOut = row.querySelector(".line-time-out")?.value || "";
+  const hours = timeDifferenceHours(timeIn, timeOut);
+  if (qty <= 0 || rate < 0) return "";
+  const basis = hours > 0 ? hours : 1;
+  return (qty * rate * basis).toFixed(2);
+}
+
+function updateLineItemTotal() {
+  const total = lineItemsTotal(collectLineItems({ allowIncomplete: true }).lineItems);
+  document.querySelector("#lineItemsTotal").textContent = moneyFormatter.format(total);
+}
+
+function createLineItemRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "line-item-row";
+  row.innerHTML = `
+    <input class="line-qty" min="0" step="0.01" type="number" value="${item.quantity || ""}" aria-label="Quantity" />
+    <input class="line-description" type="text" value="${item.description || ""}" placeholder="Line item" aria-label="Line item" />
+    <input class="line-time-in" type="time" value="${item.timeIn || ""}" aria-label="Time in" />
+    <input class="line-time-out" type="time" value="${item.timeOut || ""}" aria-label="Time out" />
+    <input class="line-rate" min="0" step="0.01" type="number" value="${item.rate || ""}" placeholder="0.00" aria-label="Rate" />
+    <input class="line-charge" min="0" step="0.01" type="number" value="${item.charge || ""}" placeholder="0.00" aria-label="Charges" />
+    <button class="small-button remove-line-item" type="button">Remove</button>
+  `;
+  row.querySelectorAll("input").forEach((input) => input.addEventListener("input", () => {
+    if (["line-qty", "line-time-in", "line-time-out", "line-rate"].some((className) => input.classList.contains(className))) {
+      const chargeInput = row.querySelector(".line-charge");
+      if (!chargeInput.dataset.manual) chargeInput.value = calculateLineCharge(row);
+    }
+    if (input.classList.contains("line-charge")) input.dataset.manual = "true";
+    updateLineItemTotal();
+  }));
+  row.querySelector(".remove-line-item").addEventListener("click", () => {
+    row.remove();
+    if (!document.querySelectorAll(".line-item-row").length) addLineItemRow();
+    updateLineItemTotal();
+  });
+  return row;
+}
+
+function addLineItemRow(item = {}) {
+  document.querySelector("#lineItemsList").append(createLineItemRow(item));
+  updateLineItemTotal();
+}
+
+function resetLineItems() {
+  document.querySelector("#lineItemsList").innerHTML = "";
+  addLineItemRow();
+}
+
+function collectLineItems({ allowIncomplete = false } = {}) {
+  const lineItems = [];
+  const errors = [];
+  document.querySelectorAll(".line-item-row").forEach((row, index) => {
+    const quantity = row.querySelector(".line-qty").value.trim();
+    const description = row.querySelector(".line-description").value.trim();
+    const timeIn = row.querySelector(".line-time-in").value;
+    const timeOut = row.querySelector(".line-time-out").value;
+    const rate = row.querySelector(".line-rate").value.trim();
+    const charge = row.querySelector(".line-charge").value.trim();
+    const values = [quantity, description, timeIn, timeOut, rate, charge];
+    if (!values.some(Boolean)) return;
+    if (!allowIncomplete && values.some((value) => !value)) errors.push(`Line ${index + 1} is missing quantity, line item, time in, time out, rate, or charges.`);
+    if (!allowIncomplete && Number(quantity) <= 0) errors.push(`Line ${index + 1} quantity must be greater than 0.`);
+    if (!allowIncomplete && Number(rate) < 0) errors.push(`Line ${index + 1} rate cannot be negative.`);
+    if (!allowIncomplete && Number(charge) < 0) errors.push(`Line ${index + 1} charges cannot be negative.`);
+    lineItems.push({
+      quantity: Number(quantity || 0),
+      description,
+      timeIn,
+      timeOut,
+      rate: Number(rate || 0),
+      charge: Number(charge || 0),
+    });
+  });
+  if (!allowIncomplete && !lineItems.length) errors.push("Add at least one line item with charges.");
+  return { lineItems, errors };
 }
 
 function isSignatureBlank(canvas) {
@@ -1057,6 +1160,7 @@ function ticketDetails(ticket) {
     ["Scheduled", ticket.startTime || "TBD"],
     ["Actual", `${ticket.actualStart || "--"} to ${ticket.actualEnd || "--"}`],
     ["Amount", formatAmount(ticket)],
+    ["Line total", moneyFormatter.format(lineItemsTotal(ticket.lineItems || []))],
     ["Site", ticket.site],
     ["AFV/PO #", ticket.afvPoNumber || "Not entered"],
     ["Exposure hours", ticket.exposureHours === "" || ticket.exposureHours === undefined ? "Not entered" : ticket.exposureHours],
@@ -1076,6 +1180,8 @@ function buildTicketCard(ticket, context = "dispatch") {
   pill.classList.add(statusClass(ticket.status));
   card.querySelector(".ticket-details").innerHTML = ticketDetails(ticket).map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
   card.querySelector(".ticket-notes").textContent = ticket.notes || "No special instructions added.";
+  const lineItemText = (ticket.lineItems || []).map((item) => `${item.quantity} | ${item.description} | ${item.timeIn || "--"}-${item.timeOut || "--"} | ${moneyFormatter.format(Number(item.charge || 0))}`).join("\n");
+  if (lineItemText) card.querySelector(".ticket-notes").textContent = `${ticket.notes || ""}\n\n${lineItemText}`.trim();
 
   const allFiles = uniqueNames([...(ticket.attachments || []), ...(ticket.driverAttachments || [])]);
   card.querySelector(".attachment-list").innerHTML = allFiles.length
@@ -1649,7 +1755,7 @@ function downloadText(filename, text, type = "text/plain") {
 }
 
 function exportCsv() {
-  const rows = [["Ticket", "Customer", "Date", "Service", "AFV/PO #", "Sales Person", "Ordered By", "Driver", "Equipment", "Status", "Amount", "Signed", "Exposure Hours", "Files"]];
+  const rows = [["Ticket", "Customer", "Date", "Service", "AFV/PO #", "Sales Person", "Ordered By", "Driver", "Equipment", "Status", "Amount", "Line Items", "Signed", "Exposure Hours", "Files"]];
   const readyTickets = state.tickets.filter((ticket) => ticket.status === "Final Approved");
   if (!readyTickets.length) {
     alert("There are no final approved tickets ready to export for invoicing.");
@@ -1667,6 +1773,7 @@ function exportCsv() {
     equipmentNames(ticket),
     ticket.status,
     ticketTotal(ticket),
+    (ticket.lineItems || []).map((item) => `${item.quantity} ${item.description} ${item.timeIn}-${item.timeOut} rate ${item.rate} charge ${item.charge}`).join("; "),
     ticket.signerName || "",
     ticket.exposureHours === "" || ticket.exposureHours === undefined ? "" : ticket.exposureHours,
     [...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join("; "),
@@ -1677,7 +1784,7 @@ function exportCsv() {
 function exportPacket() {
   const packet = state.tickets
     .filter((ticket) => ticket.status === "Final Approved")
-    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nAFV/PO #: ${ticket.afvPoNumber || "Not entered"}\nSales person: ${ticket.salesPerson || "Not entered"}\nOrdered By: ${ticket.orderedBy || "Not entered"}\nAmount: ${formatAmount(ticket)}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nEquipment: ${equipmentNames(ticket) || "Unassigned"}\nExposure hours: ${ticket.exposureHours === "" || ticket.exposureHours === undefined ? "Not entered" : ticket.exposureHours}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
+    .map((ticket) => `${ticket.id}\nCustomer: ${customerName(ticket.customerId)}\nSite: ${ticket.site}\nAFV/PO #: ${ticket.afvPoNumber || "Not entered"}\nSales person: ${ticket.salesPerson || "Not entered"}\nOrdered By: ${ticket.orderedBy || "Not entered"}\nAmount: ${formatAmount(ticket)}\nLine items: ${(ticket.lineItems || []).map((item) => `${item.quantity} ${item.description} ${item.timeIn}-${item.timeOut} rate ${item.rate} charge ${item.charge}`).join("; ") || "None"}\nDriver: ${findDriver(ticket.driverId)?.name || ""}\nEquipment: ${equipmentNames(ticket) || "Unassigned"}\nExposure hours: ${ticket.exposureHours === "" || ticket.exposureHours === undefined ? "Not entered" : ticket.exposureHours}\nSigned by: ${ticket.signerName || "Not signed"}\nNotes: ${ticket.driverNotes || ticket.notes || ""}\nFiles: ${[...(ticket.attachments || []), ...(ticket.driverAttachments || [])].join(", ") || "None"}`)
     .join("\n\n---\n\n");
   downloadText("prz-invoice-packet.txt", packet || "No final approved tickets ready for invoicing.");
 }
@@ -1694,7 +1801,7 @@ function seedSampleDay() {
       id: "PRZ-1048", customerId: "cus-1", site: "County Road 118 lease pad", serviceType: "Crane lift", priority: "High",
       salesPerson: "Amanda Tijerina", orderedBy: "Luis Moreno",
       driverId: "drv-1", equipmentId: "eq-1", equipmentIds: ["eq-1"], afvPoNumber: "PO-1048", jobDate: todayISO(), startTime: "07:30", hours: 6, rate: 225, mileage: 18,
-      fuel: 95, minimum: 1000, overtimeHours: 0, attachments: ["lift-plan.pdf"], driverAttachments: ["compressor-set-photo.jpg"],
+      fuel: 95, minimum: 1000, overtimeHours: 0, lineItems: [{ quantity: 1, description: "Skid", timeIn: "07:30", timeOut: "11:30", rate: 200, charge: 800 }], attachments: ["lift-plan.pdf"], driverAttachments: ["compressor-set-photo.jpg"],
       notes: "Set compressor skid. Call site contact before entering the gate.", status: "In Progress", actualStart: "07:42",
       createdAt: new Date(Date.now() - 7200000).toISOString(),
     },
@@ -1728,6 +1835,11 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     alert(`Complete these required dispatch fields before sending:\n\n${missing.join("\n")}`);
     return;
   }
+  const { lineItems, errors: lineItemErrors } = collectLineItems();
+  if (lineItemErrors.length) {
+    alert(`Complete the line items before sending:\n\n${lineItemErrors.join("\n")}`);
+    return;
+  }
   const ticket = {
     id: ticketNumber(),
     customerId: data.get("customerId"),
@@ -1748,6 +1860,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
     fuel: 0,
     minimum: 0,
     overtimeHours: 0,
+    lineItems,
     notes: data.get("notes").trim(),
     attachments: fileNames(document.querySelector("#ticketFiles")),
     driverAttachments: [],
@@ -1769,6 +1882,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
       notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, savedTicket.driver_id || "driver");
       if (!smsResult.sent) notify(`${ticket.id} was saved, but SMS was not sent: ${smsResult.error}`, "dispatch");
       form.reset();
+      resetLineItems();
       document.querySelector("#jobDate").value = todayISO();
       await loadSupabaseReferenceData();
       setView("drivers");
@@ -1784,6 +1898,7 @@ document.querySelector("#ticketForm").addEventListener("submit", (event) => {
   updateEquipmentFromTickets(ticket);
   notify(`${ticket.id} sent to ${findDriver(ticket.driverId)?.name || "driver"}.`, ticket.driverId || "driver");
   event.currentTarget.reset();
+  resetLineItems();
   document.querySelector("#jobDate").value = todayISO();
   renderAll();
   setView("drivers");
@@ -2021,6 +2136,7 @@ document.querySelector("#statusFilter").addEventListener("change", renderTickets
 document.querySelector("#driverQueueSelect").addEventListener("change", renderDriverQueue);
 document.querySelector("#signatureTicketSelect").addEventListener("change", populateCompletionFields);
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
+document.querySelector("#addLineItem").addEventListener("click", () => addLineItemRow());
 document.querySelector("#addDriverUnit").addEventListener("click", addPendingDriverUnit);
 document.querySelector("#roleSelect").addEventListener("change", (event) => {
   if (supabaseProfile?.role) {
@@ -2114,5 +2230,6 @@ trackUserActivity();
 document.querySelector("#todayLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 document.querySelector("#jobDate").value = todayISO();
 document.querySelector("#maintenanceDue").value = todayISO();
+resetLineItems();
 initSupabase();
 renderAll();

@@ -138,6 +138,22 @@
               <div class="form-grid two">
                 <label>Mileage<input name="mileage" min="0" required step="1" type="number" value="0" /></label>
               </div>
+              <section class="line-items-panel">
+                <div class="line-items-heading">
+                  <div>
+                    <p class="eyebrow">Ticket charges</p>
+                    <h3>Line items</h3>
+                  </div>
+                  <button class="small-button" id="addLineItem" type="button">Add line</button>
+                </div>
+                <div class="line-items-grid" aria-label="Line items">
+                  <div class="line-items-header">
+                    <span>Qty</span><span>Line item</span><span>Time in</span><span>Time out</span><span>Rate</span><span>Charges</span><span></span>
+                  </div>
+                  <div id="lineItemsList"></div>
+                </div>
+                <div class="line-items-total"><span>Total charges</span><strong id="lineItemsTotal">$0</strong></div>
+              </section>
               <label>Attachments<input id="ticketFiles" name="files" type="file" multiple /></label>
               <label>Work instructions<textarea id="notes" name="notes" required rows="4" placeholder="Lift plan, contact, load details, directions"></textarea></label>
               <button class="primary-button" type="submit">Send work ticket to driver</button>

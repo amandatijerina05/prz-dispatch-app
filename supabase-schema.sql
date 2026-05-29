@@ -64,6 +64,7 @@ create table if not exists work_tickets (
   fuel_surcharge numeric(10,2) not null default 0 check (fuel_surcharge >= 0),
   minimum_charge numeric(10,2) not null default 0 check (minimum_charge >= 0),
   overtime_hours numeric(8,2) not null default 0 check (overtime_hours >= 0),
+  line_items jsonb not null default '[]'::jsonb,
   work_instructions text not null,
   status text not null default 'Sent' check (status in ('Sent', 'Accepted', 'In Progress', 'Completed', 'Out for Signature', 'PO Stamp', 'Final Submitted', 'Paid', 'Final Approved', 'Invoiced', 'Canceled')),
   actual_start time,

@@ -614,6 +614,55 @@ button:focus-visible {
   font-size: 0.82rem;
 }
 
+.line-items-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.line-items-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.line-items-heading h3 {
+  margin: 0;
+}
+
+.line-items-grid {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.line-items-header,
+.line-item-row {
+  display: grid;
+  grid-template-columns: 80px minmax(190px, 1.5fr) 100px 100px 100px 110px auto;
+  gap: 8px;
+  min-width: 780px;
+  align-items: center;
+}
+
+.line-items-header {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.line-items-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  font-weight: 900;
+}
+
 .ticket-list {
   display: grid;
   gap: 12px;
