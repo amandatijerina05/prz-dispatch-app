@@ -53,7 +53,7 @@
           <button class="nav-tab" data-view="customers" data-roles="admin,dispatcher,approver,invoicing" type="button"><span class="tab-icon">CUS</span>Customers</button>
           <button class="nav-tab" data-view="operations" data-roles="admin,dispatcher" type="button"><span class="tab-icon">OPS</span>Calendar & Map</button>
           <button class="nav-tab" data-view="maintenance" data-roles="admin,maintenance" type="button"><span class="tab-icon">MNT</span>Maintenance</button>
-          <button class="nav-tab" data-view="reports" data-roles="admin" type="button"><span class="tab-icon">RPT</span>Reports</button>
+          <button class="nav-tab" data-view="reports" data-roles="admin,invoicing" type="button"><span class="tab-icon">RPT</span>Reports</button>
           <button class="nav-tab" data-view="notifications" data-roles="admin,dispatcher,driver,approver,invoicing" type="button"><span class="tab-icon">MSG</span>Notifications</button>
           <button class="nav-tab" data-view="admin" data-roles="admin" type="button"><span class="tab-icon">ADM</span>Admin</button>
         </nav>
@@ -85,9 +85,10 @@
         </section>
 
         <section class="stats-grid" aria-label="Ticket totals">
-          <article class="metric"><span>Open Tickets</span><strong id="openCount">0</strong></article>
-          <article class="metric"><span>With Drivers</span><strong id="driverCount">0</strong></article>
-          <article class="metric"><span>Ready to Invoice</span><strong id="invoiceCount">0</strong></article>
+          <button class="metric metric-button" data-ticket-bucket="open" type="button"><span>Open Tickets</span><strong id="openCount">0</strong></button>
+          <button class="metric metric-button" data-ticket-bucket="drivers" type="button"><span>With Drivers</span><strong id="driverCount">0</strong></button>
+          <button class="metric metric-button" data-ticket-bucket="approver" type="button"><span>With Approver</span><strong id="approverCount">0</strong></button>
+          <button class="metric metric-button" data-ticket-bucket="ready" type="button"><span>Ready to Invoice</span><strong id="invoiceCount">0</strong></button>
           <article class="metric"><span>Projected Revenue</span><strong id="revenueCount">$0</strong></article>
         </section>
 
@@ -253,6 +254,7 @@
 
         <section class="view" id="reportsView">
           <div class="reports-grid">
+            <section class="panel reports-wide"><div class="panel-heading"><div><p class="eyebrow">Ticket queues</p><h2>Work ticket status</h2></div></div><div id="ticketQueueReport"></div></section>
             <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Reports</p><h2>Revenue by customer</h2></div></div><div id="customerReport"></div></section>
             <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Utilization</p><h2>Equipment workload</h2></div></div><div id="equipmentReport"></div></section>
             <section class="panel"><div class="panel-heading"><div><p class="eyebrow">A/R watch</p><h2>Uninvoiced work</h2></div></div><div id="uninvoicedReport"></div></section>

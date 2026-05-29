@@ -7,7 +7,7 @@ const permissions = {
   dispatcher: ["dispatch", "drivers", "customers", "operations", "notifications"],
   driver: ["drivers", "notifications"],
   approver: ["invoicing", "customers", "notifications"],
-  invoicing: ["invoicing", "customers", "notifications"],
+  invoicing: ["invoicing", "customers", "reports", "notifications"],
   maintenance: ["maintenance"],
 };
 
@@ -78,11 +78,13 @@ let pendingDriverUnits = [];
 let authLoadId = 0;
 let adminUsersLoading = false;
 let adminUsersLoadStatus = "";
+let reportTicketBucket = "open";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const approvalStatuses = ["Out for Signature", "PO Stamp", "Final Submitted", "Paid", "Final Approved"];
 const invoiceWorkflowStatuses = ["Completed", ...approvalStatuses, "Invoiced"];
 const closedStatuses = ["Completed", ...approvalStatuses, "Invoiced", "Canceled"];
+const approverQueueStatuses = ["Completed", "Out for Signature", "PO Stamp", "Final Submitted", "Paid"];
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -961,15 +963,50 @@ function renderSelects() {
 }
 
 function renderStats() {
-  const open = state.tickets.filter((ticket) => !closedStatuses.includes(ticket.status)).length;
-  const withDrivers = state.tickets.filter((ticket) => ["Sent", "Accepted", "In Progress"].includes(ticket.status)).length;
-  const ready = state.tickets.filter((ticket) => ticket.status === "Final Approved").length;
+  const buckets = ticketBuckets();
   const revenue = state.tickets.reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
-  document.querySelector("#openCount").textContent = open;
-  document.querySelector("#driverCount").textContent = withDrivers;
-  document.querySelector("#invoiceCount").textContent = ready;
+  document.querySelector("#openCount").textContent = buckets.open.tickets.length;
+  document.querySelector("#driverCount").textContent = buckets.drivers.tickets.length;
+  document.querySelector("#approverCount").textContent = buckets.approver.tickets.length;
+  document.querySelector("#invoiceCount").textContent = buckets.ready.tickets.length;
   document.querySelector("#revenueCount").textContent = moneyFormatter.format(revenue);
   document.querySelector("#nextTicketNumber").textContent = ticketNumber();
+}
+
+function ticketBuckets() {
+  return {
+    open: {
+      label: "Open Tickets",
+      description: "Tickets not completed, approved, invoiced, or canceled.",
+      tickets: state.tickets.filter((ticket) => !closedStatuses.includes(ticket.status)),
+    },
+    drivers: {
+      label: "With Drivers",
+      description: "Tickets sent to drivers, accepted, or in progress.",
+      tickets: state.tickets.filter((ticket) => ["Sent", "Accepted", "In Progress"].includes(ticket.status)),
+    },
+    approver: {
+      label: "With Approver",
+      description: "Completed tickets moving through approval before they are ready to invoice.",
+      tickets: state.tickets.filter((ticket) => approverQueueStatuses.includes(ticket.status)),
+    },
+    ready: {
+      label: "Ready to Invoice",
+      description: "Final approved tickets waiting on invoicing.",
+      tickets: state.tickets.filter((ticket) => ticket.status === "Final Approved"),
+    },
+  };
+}
+
+function canOpenTicketQueues() {
+  return ["admin", "invoicing"].includes(state.role);
+}
+
+function openTicketQueue(bucket) {
+  if (!canOpenTicketQueues()) return;
+  reportTicketBucket = bucket;
+  setView("reports");
+  renderReports();
 }
 
 function ticketDetails(ticket) {
@@ -1011,7 +1048,7 @@ function buildTicketCard(ticket, context = "dispatch") {
     if (ticket.status === "Sent") actions.append(actionButton("Accept ticket", () => updateTicket(ticket.id, "Accepted")));
     if (ticket.status === "Accepted") actions.append(actionButton("Start work", () => updateTicket(ticket.id, "In Progress")));
     if (ticket.status === "In Progress") actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
-  } else {
+  } else if (context !== "report") {
     if (!["Invoiced", "Canceled"].includes(ticket.status)) {
       actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
     }
@@ -1202,9 +1239,35 @@ function renderReports() {
   const customerTotals = sumBy(state.tickets, (ticket) => customerName(ticket.customerId));
   const equipmentTotals = sumBy(state.tickets, (ticket) => findEquipment(ticket.equipmentId)?.name || "Unassigned");
   const uninvoiced = state.tickets.filter((ticket) => ticket.status === "Final Approved").reduce((sum, ticket) => sum + ticketTotal(ticket), 0);
+  renderTicketQueueReport();
   document.querySelector("#customerReport").innerHTML = reportBars(customerTotals);
   document.querySelector("#equipmentReport").innerHTML = reportBars(equipmentTotals);
   document.querySelector("#uninvoicedReport").innerHTML = `<div class="big-number">${moneyFormatter.format(uninvoiced)}</div><p class="muted-small">Final approved work waiting on invoicing.</p>`;
+}
+
+function renderTicketQueueReport() {
+  const buckets = ticketBuckets();
+  const activeBucket = buckets[reportTicketBucket] || buckets.open;
+  const tickets = activeBucket.tickets.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const container = document.querySelector("#ticketQueueReport");
+  if (!container) return;
+  container.innerHTML = `
+    <div class="ticket-bucket-tabs">
+      ${Object.entries(buckets).map(([key, bucket]) => `<button class="segment ${key === reportTicketBucket ? "active" : ""}" data-report-bucket="${key}" type="button">${bucket.label} (${bucket.tickets.length})</button>`).join("")}
+    </div>
+    <p class="muted-small">${activeBucket.description}</p>
+    <div class="ticket-list report-ticket-list"></div>
+  `;
+  const list = container.querySelector(".report-ticket-list");
+  if (!tickets.length) {
+    list.innerHTML = `<div class="empty-state">No tickets in this section.</div>`;
+  } else {
+    tickets.forEach((ticket) => list.append(buildTicketCard(ticket, "report")));
+  }
+  container.querySelectorAll("[data-report-bucket]").forEach((button) => button.addEventListener("click", () => {
+    reportTicketBucket = button.dataset.reportBucket;
+    renderReports();
+  }));
 }
 
 function sumBy(tickets, labeler) {
@@ -1879,6 +1942,7 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
 });
 
 document.querySelectorAll(".nav-tab").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+document.querySelectorAll("[data-ticket-bucket]").forEach((button) => button.addEventListener("click", () => openTicketQueue(button.dataset.ticketBucket)));
 document.querySelector("#statusFilter").addEventListener("change", renderTickets);
 document.querySelector("#driverQueueSelect").addEventListener("change", renderDriverQueue);
 document.querySelector("#driver").addEventListener("change", renderEquipmentOptionsForDriver);
