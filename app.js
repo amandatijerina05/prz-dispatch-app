@@ -1197,8 +1197,15 @@ function buildTicketCard(ticket, context = "dispatch") {
 
   const actions = card.querySelector(".ticket-actions");
   if (context === "driver") {
+    const blockingTicket = activeDriverStartedTicket(ticket.driverId, ticket.id);
     if (ticket.status === "Sent") actions.append(actionButton("Accept ticket", () => updateTicket(ticket.id, "Accepted")));
-    if (ticket.status === "Accepted") actions.append(actionButton("Start work", () => updateTicket(ticket.id, "In Progress")));
+    if (ticket.status === "Accepted") {
+      const startButton = actionButton(blockingTicket ? `Finish ${blockingTicket.id} first` : "Start work", () => updateTicket(ticket.id, "In Progress"));
+      if (blockingTicket) {
+        startButton.title = `Complete ${blockingTicket.id} before starting another ticket.`;
+      }
+      actions.append(startButton);
+    }
     if (ticket.status === "In Progress") actions.append(actionButton("Mark complete", () => updateTicket(ticket.id, "Completed")));
   } else if (context !== "report") {
     if (!["Invoiced", "Canceled"].includes(ticket.status)) {
@@ -1209,6 +1216,11 @@ function buildTicketCard(ticket, context = "dispatch") {
     }
   }
   return card;
+}
+
+function activeDriverStartedTicket(driverId, excludeTicketId = "") {
+  if (!driverId) return null;
+  return state.tickets.find((ticket) => ticket.driverId === driverId && ticket.id !== excludeTicketId && ticket.status === "In Progress");
 }
 
 function lineItemsTableHtml(ticket) {
@@ -1581,6 +1593,13 @@ function renderAll() {
 
 async function updateTicket(id, status) {
   const currentTicket = state.tickets.find((ticket) => ticket.id === id);
+  if (status === "In Progress" && currentTicket) {
+    const blockingTicket = activeDriverStartedTicket(currentTicket.driverId, currentTicket.id);
+    if (blockingTicket) {
+      alert(`Complete ticket ${blockingTicket.id} before starting another ticket.`);
+      return;
+    }
+  }
   if (status === "Canceled" && !canCancelTicket(currentTicket)) {
     alert("Only office users can cancel a work ticket before it is invoiced.");
     return;
