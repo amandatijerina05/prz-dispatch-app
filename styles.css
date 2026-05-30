@@ -846,6 +846,13 @@ button:focus-visible {
   line-height: 1.45;
 }
 
+.status-pending-sync,
+.sync-waiting {
+  background: #fff4d7;
+  color: #6f4d00;
+  border-color: #f2cf74;
+}
+
 .empty-state {
   padding: 26px;
   border: 1px dashed #c7c9d0;

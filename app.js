@@ -1,4 +1,7 @@
 const STORAGE_KEY = "prz-dispatch-app-v2";
+const OFFLINE_DB_NAME = "prz-dispatch-offline";
+const OFFLINE_DB_VERSION = 1;
+const OFFLINE_COMPLETION_STORE = "completionPackets";
 const INACTIVITY_TIMEOUT_MINUTES = 30;
 const DEFAULT_EQUIPMENT_TYPES = ["Tractor", "Flatbed", "Drop Deck", "Lowboy", "Eagle II", "Stepdeck", "379", "W900", "CASCADIA 125", "FB STEPDECK", "T660", "CASCADIA", "579", "387"];
 
@@ -62,6 +65,7 @@ const defaultState = {
   equipmentTypes: [...DEFAULT_EQUIPMENT_TYPES],
   maintenance: [],
   notifications: [],
+  offlinePackets: [],
   tickets: [],
 };
 
@@ -73,6 +77,7 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
 let completionSaveInProgress = false;
+let offlineSyncInProgress = false;
 let inactivityTimer = null;
 let pendingDriverUnits = [];
 let authLoadId = 0;
@@ -101,6 +106,7 @@ function normalizeState(data) {
   data.users ||= structuredClone(defaultState.users);
   data.maintenance ||= [];
   data.notifications ||= [];
+  data.offlinePackets ||= [];
   data.equipmentTypes ||= [...DEFAULT_EQUIPMENT_TYPES];
   data.role ||= "admin";
   data.drivers = (data.drivers || []).map((driver) => ({
@@ -123,6 +129,7 @@ function normalizeState(data) {
     exposureHours: "",
     equipmentIds: ticket.equipmentId ? [ticket.equipmentId] : [],
     customerSignature: "",
+    offlinePending: false,
     signerName: "",
     actualStart: "",
     actualEnd: "",
@@ -441,6 +448,57 @@ async function uploadSignature(ticketDbId, ticketNumber, canvas) {
   return path;
 }
 
+async function uploadSignatureDataUrl(ticketDbId, ticketNumber, signatureDataUrl) {
+  const blob = dataUrlToBlob(signatureDataUrl);
+  const path = `${ticketNumber}/signature-${Date.now()}.png`;
+  const { error } = await supabaseClient.storage.from("signatures").upload(path, blob, {
+    contentType: "image/png",
+    upsert: true,
+  });
+  if (error) throw new Error(`signature upload failed: ${error.message}`);
+  const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
+    ticket_id: ticketDbId,
+    file_name: "customer-signature.png",
+    file_path: path,
+    file_type: "signature",
+  });
+  if (recordError) throw new Error(`signature attachment record failed: ${recordError.message}`);
+  return path;
+}
+
+async function uploadOfflineDriverAttachments(ticketDbId, ticketNumber, attachments) {
+  if (!attachments.length) return [];
+  const { data, error } = await supabaseClient
+    .from("ticket_attachments")
+    .select("file_name")
+    .eq("ticket_id", ticketDbId)
+    .eq("file_type", "driver");
+  if (error) throw new Error(`Could not check existing attachments: ${error.message}`);
+  const existingNames = new Set((data || []).map((file) => file.file_name));
+  const uploaded = [];
+  for (const attachment of attachments) {
+    if (existingNames.has(attachment.fileName)) continue;
+    const safeName = attachment.storageName.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `${ticketNumber}/${crypto.randomUUID()}-${safeName}`;
+    const blob = dataUrlToBlob(attachment.dataUrl);
+    const { error: uploadError } = await supabaseClient.storage.from("driver-attachments").upload(path, blob, {
+      contentType: attachment.contentType || "application/octet-stream",
+      upsert: false,
+    });
+    if (uploadError) throw new Error(`driver-attachments upload failed: ${uploadError.message}`);
+    const { error: recordError } = await supabaseClient.from("ticket_attachments").insert({
+      ticket_id: ticketDbId,
+      file_name: attachment.fileName,
+      file_path: path,
+      file_type: "driver",
+    });
+    if (recordError) throw new Error(`driver attachment record failed: ${recordError.message}`);
+    existingNames.add(attachment.fileName);
+    uploaded.push(attachment.fileName);
+  }
+  return uploaded;
+}
+
 function withSaveTimeout(promise, seconds, message) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -454,6 +512,140 @@ function setCompletionSaving(isSaving) {
   if (!button) return;
   button.disabled = isSaving;
   button.textContent = isSaving ? "Saving..." : "Save completion packet";
+}
+
+function clearCompletionForm() {
+  document.querySelector("#driverNote").value = "";
+  document.querySelector("#driverAfvPoNumber").value = "";
+  document.querySelector("#exposureHours").value = "";
+  resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
+  document.querySelector("#signerName").value = "";
+  document.querySelector("#driverAttachment").value = "";
+  const canvas = document.querySelector("#signatureCanvas");
+  canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+}
+
+async function completionPacketFromForm(ticket, fields, reason = "") {
+  const attachments = [];
+  for (const file of [...fields.attachmentInput.files]) {
+    const preparedFile = await prepareFileForUpload(file, true);
+    attachments.push({
+      fileName: preparedFile.fileName,
+      storageName: preparedFile.storageName,
+      contentType: preparedFile.contentType || file.type || "application/octet-stream",
+      dataUrl: await blobToDataUrl(preparedFile.body),
+    });
+  }
+  return {
+    id: `offline-${crypto.randomUUID()}`,
+    ticketId: ticket.id,
+    ticketDbId: ticket.dbId || "",
+    ticketNumber: ticket.id,
+    createdAt: new Date().toISOString(),
+    lastError: reason,
+    driverNotes: fields.note,
+    afvPoNumber: fields.afvPoNumber,
+    exposureHours: fields.exposureHours,
+    lineItems: fields.lineItems,
+    signerName: fields.signerName,
+    signatureDataUrl: fields.signatureDataUrl,
+    attachments,
+  };
+}
+
+async function saveCompletionPacketOffline(ticket, fields, reason) {
+  const packet = await completionPacketFromForm(ticket, fields, reason);
+  await saveOfflinePacket(packet);
+  upsertOfflinePacketMeta(packet);
+  state.tickets = state.tickets.map((item) => item.id === ticket.id ? {
+    ...item,
+    driverNotes: fields.note,
+    afvPoNumber: fields.afvPoNumber,
+    exposureHours: fields.exposureHours,
+    lineItems: fields.lineItems,
+    driverAttachments: uniqueNames([...(item.driverAttachments || []), ...packet.attachments.map((attachment) => attachment.fileName)]),
+    signerName: fields.signerName,
+    customerSignature: fields.signatureDataUrl,
+    offlinePending: true,
+  } : item);
+  notify(`${ticket.id} completion packet saved offline and will sync when signal returns.`, "driver");
+  renderAll();
+}
+
+async function resolvePacketTicketDbId(packet) {
+  if (packet.ticketDbId) return packet.ticketDbId;
+  const { data, error } = await supabaseClient
+    .from("work_tickets")
+    .select("id")
+    .eq("ticket_number", packet.ticketNumber)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.id) throw new Error(`Could not find ${packet.ticketNumber} in Supabase.`);
+  return data.id;
+}
+
+async function submitCompletionPacket(packet) {
+  const ticketDbId = await resolvePacketTicketDbId(packet);
+  await withSaveTimeout(
+    uploadOfflineDriverAttachments(ticketDbId, packet.ticketNumber, packet.attachments || []),
+    45,
+    "Driver attachment upload timed out. The packet will retry when signal returns.",
+  );
+  const signaturePath = await withSaveTimeout(
+    uploadSignatureDataUrl(ticketDbId, packet.ticketNumber, packet.signatureDataUrl),
+    45,
+    "Customer signature upload timed out. The packet will retry when signal returns.",
+  );
+  const { error } = await withSaveTimeout(
+    supabaseClient.from("work_tickets").update({
+      driver_notes: packet.driverNotes,
+      afv_po_number: packet.afvPoNumber,
+      exposure_hours: packet.exposureHours,
+      line_items: packet.lineItems,
+      signer_name: packet.signerName,
+      customer_signature_path: signaturePath,
+    }).eq("id", ticketDbId),
+    30,
+    "Ticket update timed out. The packet will retry when signal returns.",
+  );
+  if (error) throw new Error(`ticket completion update failed: ${error.message}`);
+}
+
+async function syncOfflineCompletionPackets({ quiet = false } = {}) {
+  if (!supabaseSession || !navigator.onLine || completionSaveInProgress || offlineSyncInProgress || !(state.offlinePackets || []).length) return;
+  offlineSyncInProgress = true;
+  let packets = [];
+  try {
+    packets = await getOfflinePackets();
+  } catch (error) {
+    if (!quiet) alert(`Could not read offline completion packets.\n\n${error.message}`);
+    offlineSyncInProgress = false;
+    return;
+  }
+  try {
+    let syncedCount = 0;
+    for (const packet of packets) {
+      try {
+        await submitCompletionPacket(packet);
+        await deleteOfflinePacket(packet.id);
+        removeOfflinePacketMeta(packet.id);
+        notify(`${packet.ticketNumber} offline completion packet synced.`, "invoicing");
+        syncedCount += 1;
+      } catch (error) {
+        packet.lastError = error.message;
+        await saveOfflinePacket(packet);
+        upsertOfflinePacketMeta(packet);
+        if (!isConnectionError(error)) break;
+        return;
+      }
+    }
+    if (syncedCount) {
+      await loadSupabaseReferenceData();
+      if (!quiet) alert("Offline completion packets synced.");
+    }
+  } finally {
+    offlineSyncInProgress = false;
+  }
 }
 
 async function sendWorkTicketSms(ticket) {
@@ -651,6 +843,7 @@ async function applySupabaseSession(session) {
   resetInactivityTimer();
   renderAll();
   await loadSupabaseReferenceData();
+  syncOfflineCompletionPackets({ quiet: true });
   renderAll();
 }
 
@@ -889,6 +1082,111 @@ function notify(message, audience = "dispatcher") {
 
 function fileNames(input) {
   return [...input.files].map((file) => file.name);
+}
+
+function isConnectionError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return !navigator.onLine || message.includes("timed out") || message.includes("failed to fetch") || message.includes("network") || message.includes("fetch");
+}
+
+function pendingPacketForTicket(ticketId) {
+  return (state.offlinePackets || []).find((packet) => packet.ticketId === ticketId);
+}
+
+function upsertOfflinePacketMeta(packet) {
+  state.offlinePackets = [
+    { id: packet.id, ticketId: packet.ticketId, ticketNumber: packet.ticketNumber, createdAt: packet.createdAt, lastError: packet.lastError || "" },
+    ...(state.offlinePackets || []).filter((item) => item.id !== packet.id && item.ticketId !== packet.ticketId),
+  ];
+  saveState();
+}
+
+function removeOfflinePacketMeta(packetId) {
+  state.offlinePackets = (state.offlinePackets || []).filter((packet) => packet.id !== packetId);
+  saveState();
+}
+
+function openOfflineDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("This browser does not support offline packet storage."));
+      return;
+    }
+    const request = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(OFFLINE_COMPLETION_STORE)) {
+        db.createObjectStore(OFFLINE_COMPLETION_STORE, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open offline packet storage."));
+  });
+}
+
+async function saveOfflinePacket(packet) {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(OFFLINE_COMPLETION_STORE, "readwrite");
+    transaction.objectStore(OFFLINE_COMPLETION_STORE).put(packet);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error("Could not save the offline packet."));
+    };
+  });
+}
+
+async function deleteOfflinePacket(packetId) {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(OFFLINE_COMPLETION_STORE, "readwrite");
+    transaction.objectStore(OFFLINE_COMPLETION_STORE).delete(packetId);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error("Could not remove the offline packet."));
+    };
+  });
+}
+
+async function getOfflinePackets() {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(OFFLINE_COMPLETION_STORE, "readonly");
+    const request = transaction.objectStore(OFFLINE_COMPLETION_STORE).getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error || new Error("Could not read offline packets."));
+    transaction.oncomplete = () => db.close();
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error("Could not read offline packets."));
+    };
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Could not read attachment for offline storage."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, content] = dataUrl.split(",");
+  const mime = header.match(/data:(.*?);base64/)?.[1] || "application/octet-stream";
+  const binary = atob(content);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
 }
 
 function timeDifferenceHours(start, end) {
@@ -1185,6 +1483,14 @@ function buildTicketCard(ticket, context = "dispatch") {
   const pill = card.querySelector(".status-pill");
   pill.textContent = ticket.status;
   pill.classList.add(statusClass(ticket.status));
+  const pendingPacket = pendingPacketForTicket(ticket.id);
+  if (pendingPacket) {
+    const pending = document.createElement("span");
+    pending.className = "status-pill status-pending-sync";
+    pending.textContent = "Pending sync";
+    pending.title = pendingPacket.lastError ? `Last sync issue: ${pendingPacket.lastError}` : "Saved offline. This packet will upload when signal returns.";
+    card.querySelector(".ticket-card-top").append(pending);
+  }
   card.querySelector(".ticket-details").innerHTML = ticketDetails(ticket).map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
   card.querySelector(".ticket-notes").textContent = ticket.notes || "No special instructions added.";
   const lineItemText = (ticket.lineItems || []).map((item) => `${item.quantity} | ${item.description} | ${item.timeIn || "--"}-${item.timeOut || "--"} | ${moneyFormatter.format(Number(item.charge || 0))}`).join("\n");
@@ -1299,8 +1605,10 @@ function renderDriverQueue() {
   const activeCount = tickets.filter((ticket) => ticket.status !== "Completed").length;
   const completedCount = tickets.filter((ticket) => ticket.status === "Completed").length;
   const driver = findDriver(driverId);
+  const pendingCount = tickets.filter((ticket) => pendingPacketForTicket(ticket.id)).length;
   document.querySelector("#driverSummary").innerHTML = state.role === "driver" ? `
     <div class="summary-box"><span>Assigned Tickets</span><strong>${tickets.length}</strong></div>
+    ${pendingCount ? `<div class="summary-box sync-waiting"><span>Pending Sync</span><strong>${pendingCount}</strong></div>` : ""}
   ` : `
     <div class="summary-box"><span>Driver</span><strong>${driver?.name || "No driver selected"}</strong></div>
     <div class="summary-box"><span>Phone</span><strong>${driver?.phone || "--"}</strong></div>
@@ -2139,6 +2447,25 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
     alert("That ticket could not be found. Refresh the app and try again.");
     return;
   }
+  const fields = {
+    note: noteField.value.trim(),
+    afvPoNumber: afvPoField.value.trim(),
+    exposureHours,
+    lineItems,
+    signerName: signerField.value.trim(),
+    signatureDataUrl: canvas.toDataURL("image/png"),
+    attachmentInput,
+  };
+  if (supabaseSession && currentTicket?.dbId && !navigator.onLine) {
+    try {
+      await saveCompletionPacketOffline(currentTicket, fields, "Device is offline.");
+      clearCompletionForm();
+      alert("The device is offline, so the completion packet was saved on this device. It will sync automatically when signal returns.");
+    } catch (offlineError) {
+      alert(`Completion packet could not be saved offline.\n\n${offlineError.message}`);
+    }
+    return;
+  }
   if (supabaseSession && currentTicket?.dbId) {
     completionSaveInProgress = true;
     setCompletionSaving(true);
@@ -2158,11 +2485,11 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
       );
       const { error } = await withSaveTimeout(
         supabaseClient.from("work_tickets").update({
-          driver_notes: noteField.value.trim(),
-          afv_po_number: afvPoField.value.trim(),
+          driver_notes: fields.note,
+          afv_po_number: fields.afvPoNumber,
           exposure_hours: exposureHours,
           line_items: lineItems,
-          signer_name: signerField.value.trim(),
+          signer_name: fields.signerName,
           customer_signature_path: signaturePath,
         }).eq("id", currentTicket.dbId),
         30,
@@ -2170,17 +2497,21 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
       );
       if (error) throw new Error(`ticket completion update failed: ${error.message}`);
       notify(`${ticketId} completion packet updated.`, "invoicing");
-      noteField.value = "";
-      afvPoField.value = "";
-      exposureField.value = "";
-      resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
-      signerField.value = "";
-      attachmentInput.value = "";
-      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+      clearCompletionForm();
       await loadSupabaseReferenceData();
       alert("Completion packet saved.");
     } catch (error) {
-      alert(`Completion packet could not be saved.\n\n${error.message}`);
+      if (isConnectionError(error)) {
+        try {
+          await saveCompletionPacketOffline(currentTicket, fields, error.message);
+          clearCompletionForm();
+          alert("Signal was weak, so the completion packet was saved offline. It will sync automatically when the device is back online.");
+        } catch (offlineError) {
+          alert(`Completion packet could not be saved online or offline.\n\n${offlineError.message}`);
+        }
+      } else {
+        alert(`Completion packet could not be saved.\n\n${error.message}`);
+      }
     } finally {
       completionSaveInProgress = false;
       setCompletionSaving(false);
@@ -2193,22 +2524,16 @@ document.querySelector("#saveCompletion").addEventListener("click", async () => 
   }
   state.tickets = state.tickets.map((ticket) => ticket.id === ticketId ? {
     ...ticket,
-    driverNotes: noteField.value.trim(),
-    afvPoNumber: afvPoField.value.trim(),
+    driverNotes: fields.note,
+    afvPoNumber: fields.afvPoNumber,
     exposureHours,
     lineItems,
     driverAttachments: [...(ticket.driverAttachments || []), ...fileNames(attachmentInput)],
-    signerName: signerField.value.trim(),
-    customerSignature: canvas.toDataURL("image/png"),
+    signerName: fields.signerName,
+    customerSignature: fields.signatureDataUrl,
   } : ticket);
   notify(`${ticketId} completion packet updated.`, "invoicing");
-  noteField.value = "";
-  afvPoField.value = "";
-  exposureField.value = "";
-  resetLineItems([], "#driverLineItemsList", "#driverLineItemsTotal");
-  signerField.value = "";
-  attachmentInput.value = "";
-  canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  clearCompletionForm();
   renderAll();
 });
 
@@ -2313,6 +2638,8 @@ document.querySelector("#ticketDetailModal").addEventListener("click", (event) =
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./service-worker.js");
 }
+
+window.addEventListener("online", () => syncOfflineCompletionPackets({ quiet: true }));
 
 trackUserActivity();
 document.querySelector("#todayLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
